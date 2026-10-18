@@ -75,7 +75,7 @@ For full architecture details see [docs/architecture.md](docs/architecture.md).
 | Rust                  | 1.81.0 (pinned) | [rustup.rs](https://rustup.rs)                                            |
 | Soroban / Stellar CLI | latest          | [Stellar CLI docs](https://developers.stellar.org/docs/tools/stellar-cli) |
 | Node.js               | 18+             | [nodejs.org](https://nodejs.org)                                          |
-| npm                   | 9+              | bundled with Node.js                                                      |
+| pnpm                  | 9 (pinned)      | `corepack enable` (version comes from `packageManager` in `package.json`) |
 
 The Rust toolchain version is pinned in `rust-toolchain.toml`. Running any `cargo` command will install it automatically via rustup.
 
@@ -85,12 +85,15 @@ The Rust toolchain version is pinned in `rust-toolchain.toml`. Running any `carg
 git clone https://github.com/Xoulomon/Stellar-Save.git
 cd Stellar-Save
 
-# Install root-level tooling (commitlint, husky)
-npm install
-
-# Install frontend dependencies
-cd frontend && npm install && cd ..
+# Install every workspace package (frontend, backend, mobile, packages/*)
+# plus root tooling (commitlint, husky) from the single root pnpm-lock.yaml
+corepack enable
+pnpm install
 ```
+
+The repository uses **pnpm only**. `pnpm-lock.yaml` at the root is the single
+source of truth for resolved versions — do not run `npm install` or `yarn` at
+the root and do not commit a root `package-lock.json` or `yarn.lock`.
 
 ### Environment configuration
 
@@ -363,11 +366,11 @@ The hook is installed by Husky and lives at `.husky/commit-msg`. It runs `commit
 
 ```bash
 # Install root dependencies (includes husky + commitlint)
-npm install
+pnpm install
 # Husky installs the git hook automatically via the "prepare" script
 ```
 
-If the hook is not firing, re-run `npx husky` from the repo root.
+If the hook is not firing, re-run `pnpm exec husky` from the repo root.
 
 **Verify the hook locally:**
 

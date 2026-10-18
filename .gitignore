@@ -27,3 +27,7 @@ Thumbs.db
 
 # Test snapshots (optional - uncomment if you don't want to commit these)
 # **/test_snapshots/
+
+# Package manager: pnpm only — pnpm-lock.yaml is the single root lockfile (#1935)
+/package-lock.json
+/yarn.lock
