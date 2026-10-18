@@ -31,3 +31,11 @@ Thumbs.db
 # Package manager: pnpm only — pnpm-lock.yaml is the single root lockfile (#1935)
 /package-lock.json
 /yarn.lock
+
+# Generated artifacts — never commit (#1936)
+coverage/
+*.tsbuildinfo
+*.log
+logs/
+.turbo/
+*.rcgu.o
