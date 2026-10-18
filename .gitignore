@@ -39,3 +39,7 @@ coverage/
 logs/
 .turbo/
 *.rcgu.o
+
+# Drill reports live in docs/releases/ only (#1937)
+/ssl_drill_report.json
+/tests/failover-results.json
