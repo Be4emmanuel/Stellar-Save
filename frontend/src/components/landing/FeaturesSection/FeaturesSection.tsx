@@ -1,6 +1,6 @@
 import { Box, Container, Grid, Stack, Typography } from '@mui/material';
 
-import { AppCard } from '../ui/components/AppCard';
+import { AppCard } from '@/ui/components/AppCard';
 
 /**
  * Feature grid.
