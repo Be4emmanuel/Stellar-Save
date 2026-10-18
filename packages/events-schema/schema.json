@@ -54,6 +54,16 @@
         "contributed_at": "u64"
       }
     },
+    "contribution_due": {
+      "topic": "contribution_due",
+      "fields": {
+        "group_id": "u64",
+        "member": "address",
+        "cycle": "u32",
+        "deadline": "u64",
+        "emitted_at": "u64"
+      }
+    },
     "payout_executed": {
       "topic": "payout_executed",
       "fields": {

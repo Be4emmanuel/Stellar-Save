@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { PrismaClient } from '@prisma/client';
 
-import { AnalyticsAggregator } from '../analytics_aggregator';
-import { AnalyticsService } from '../analytics_service';
+import { AnalyticsAggregator } from '../../src/analytics_aggregator';
+import { AnalyticsService } from '../../src/analytics_service';
+
+jest.mock('../../src/redis', () => ({
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue('OK'),
+  delPattern: jest.fn().mockResolvedValue(undefined),
+}));
 
 describe('AnalyticsService', () => {
   let prisma: PrismaClient;
