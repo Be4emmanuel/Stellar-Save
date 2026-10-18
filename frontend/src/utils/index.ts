@@ -9,7 +9,7 @@ export { errorHandler, formatErrorMessage, type ParsedError } from './errorHandl
 export type { GroupData, PublicGroup } from './groupApi';
 export { createGroup, fetchGroups } from './groupApi';
 export { isValidStellarAddress, validateAddress } from './validateAddress';
-export { formatDate, formatDateRelative, formatDateAbsolute, type FormatDateOptions } from './formatDate';
-export { formatAddress, type FormatAddressOptions } from './formatAddress';
+export { formatDate, formatDateRelative, formatDateAbsolute, type FormatDateOptions } from '@shared-utils/formatting';
+export { formatAddress, type FormatAddressOptions } from '@shared-utils/formatting';
 export { CacheService, cache } from './cache';
 

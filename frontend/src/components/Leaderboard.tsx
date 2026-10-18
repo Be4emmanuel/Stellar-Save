@@ -5,8 +5,8 @@ import {
   Skeleton, Alert, Chip, Tooltip,
 } from '@mui/material';
 import type { LeaderboardGroup, LeaderboardMember, TimePeriod } from '../types/leaderboard';
-import { formatAddress } from '../utils/formatAddress';
-import { formatAmount } from '../utils/formatAmount';
+import { formatAddress } from '@shared-utils/formatting';
+import { formatAmount } from '@shared-utils/formatting';
 
 // ── Period selector ───────────────────────────────────────────────────────────
 
