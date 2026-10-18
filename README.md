@@ -262,3 +262,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <!-- handsoff-issue-1706 -->
 - #1706: [Smart Contracts] Split contract.rs entrypoint into focused modules
+
+<!-- handsoff-issue-1868 -->
+- #1868: [Backend] Move `analytics_service.ts` (762 lines) into `modules/analytics`
