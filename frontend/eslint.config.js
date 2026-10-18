@@ -6,6 +6,9 @@ import tseslint from 'typescript-eslint';
 
 import base from '../eslint.config.base.js';
 
+// Shared rules (no-console, no-unused-vars, no-explicit-any, import order,
+// test-file overrides) come from the base config. Only browser/React-specific
+// settings live here.
 export default tseslint.config(
   ...base,
   {
@@ -14,11 +17,6 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
-    },
-    rules: {
-      // Use utils/logger for debug/info output; raw console.log is banned.
-      'no-console': ['error', { allow: ['warn', 'error'] }],
-      '@typescript-eslint/no-explicit-any': ['error', { fixToUnknown: true }],
     },
   },
   // Static accessibility checks.
@@ -46,12 +44,6 @@ export default tseslint.config(
           Array.isArray(severity) ? ['warn', ...severity.slice(1)] : 'warn',
         ])
       ),
-    },
-  },
-  {
-    files: ['src/test/**', '**/*.test.{ts,tsx}', 'e2e/**'],
-    rules: {
-      'no-console': 'off',
     },
   }
 );

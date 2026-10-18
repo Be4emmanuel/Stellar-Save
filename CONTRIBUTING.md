@@ -196,6 +196,37 @@ pub fn require_creator(env: &Env, group: &Group) -> Result<(), ContractError> {
 - **`no-unused-vars` and `@typescript-eslint/no-explicit-any` are both set to `error`** repo-wide in `eslint.config.base.js`. Violations block the pre-commit hook and CI. If a genuine exception is needed (e.g. a pending Prisma migration model, a browser-context injection in Playwright), add an inline `// eslint-disable-next-line @typescript-eslint/no-explicit-any -- <one-line justification>` comment.
 - **Import Ordering**: enforced by `eslint-plugin-import` (`import/order`, error). Groups are separated by a blank line, imports sorted alphabetically (case-insensitive) within each group: `builtin` → `external` → `internal` → `parent`/`sibling` (`../`, `./`) → `index` → `type`. See the `import/order` rule in `eslint.config.base.js`.
 - **Circular Dependencies**: Circular dependencies are strictly forbidden (`import/no-cycle`). Ensure modules are strictly decoupled and acyclic
+- **No `console.log`**: `no-console` is `error` repo-wide (only `console.warn` / `console.error` are allowed). Use the workspace logger — `frontend/src/utils/logger.ts` or `backend/src/lib/logger.ts` — or `process.stdout.write` in Node CLI scripts. Test files are exempt. Only logger modules may disable the rule inline.
+
+### ESLint configuration
+
+Every workspace extends one shared config, [`eslint.config.base.js`](eslint.config.base.js). Package configs spread it first and add only workspace-specific overrides — never re-declare a shared rule in a workspace config.
+
+| Config                                     | Scope                   | Workspace-specific additions                             |
+| ------------------------------------------ | ----------------------- | -------------------------------------------------------- |
+| `eslint.config.mjs`                        | repo-root tooling files | CommonJS for `.lintstagedrc.js` / `commitlint.config.js` |
+| `frontend/eslint.config.js`                | web app                 | browser globals, React Hooks, React Refresh, jsx-a11y    |
+| `backend/eslint.config.mjs`                | API server              | Node globals, CommonJS, ignores `src/generated/**`       |
+| `mobile/eslint.config.js`                  | React Native app        | ignores `.expo/`, `android/`, `ios/`                     |
+| `packages/sdk/eslint.config.mjs`           | published SDK           | none                                                     |
+| `packages/shared-utils/eslint.config.mjs`  | shared utilities        | none                                                     |
+| `packages/events-schema/eslint.config.mjs` | codegen scripts         | CommonJS + Node globals for `*.js`, ignores `generated/` |
+
+Shared rules (all from `eslint.config.base.js`):
+
+| Rule                                         | Setting                                                                                            |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `js.configs.recommended`                     | preset                                                                                             |
+| `tseslint.configs.recommended`               | preset                                                                                             |
+| `@typescript-eslint/no-explicit-any`         | `error`, `fixToUnknown: true`                                                                      |
+| `@typescript-eslint/no-unused-vars`          | `error`; names starting with `_` are ignored (args, vars, caught errors, destructured array items) |
+| `@typescript-eslint/consistent-type-imports` | `error`, `prefer: 'type-imports'`                                                                  |
+| `no-console`                                 | `error`, allows `warn` and `error`; `off` in test files                                            |
+| `import/no-cycle`                            | `error`                                                                                            |
+| `import/order`                               | `error`, grouped and alphabetized (see above)                                                      |
+| ignores                                      | `dist/**`, `node_modules/**`, `coverage/**`, `*.d.ts`                                              |
+
+Test files for the `no-console` exemption: `**/*.test.*`, `**/*.spec.*`, `**/*.e2e.{ts,tsx}`, and anything under `test/`, `tests/`, `tests-e2e/` or `e2e/`.
 
 Prettier config (`.prettierrc`):
 
