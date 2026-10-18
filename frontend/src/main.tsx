@@ -8,6 +8,7 @@ import { WalletProvider } from './wallet/WalletProvider';
 import { ToastProvider } from './components/Toast';
 import { AppRouter } from './routing/AppRouter';
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
+import { env } from './config/env';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -27,8 +28,8 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary
-        enableErrorReporting={import.meta.env.VITE_ENABLE_ERROR_REPORTING === 'true'}
-        sentryDsn={import.meta.env.VITE_SENTRY_DSN}
+        enableErrorReporting={env.VITE_ENABLE_ERROR_REPORTING}
+        sentryDsn={env.VITE_SENTRY_DSN}
       >
         <AppThemeProvider>
           <WalletProvider>
