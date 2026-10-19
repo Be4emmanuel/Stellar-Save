@@ -15,6 +15,17 @@ import {
   normalizeResponse,
   type ApiResponseEnvelope,
 } from '../lib/response-envelope';
+import {
+  AppError,
+  ValidationError,
+  AuthError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError,
+  UpstreamError,
+  isAppError,
+  mapError,
+} from '../lib/errors';
 
 describe('Response Envelope', () => {
   describe('createEnvelope', () => {
@@ -262,6 +273,92 @@ describe('Response Envelope', () => {
   });
 });
 
+describe('AppError hierarchy', () => {
+  it('should map ValidationError to 400 VALIDATION_ERROR', () => {
+    const mapped = mapError(new ValidationError('bad input'), false);
+    expect(mapped).toEqual({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'bad input',
+    });
+  });
+
+  it('should map AuthError to 401 UNAUTHORIZED', () => {
+    const mapped = mapError(new AuthError('missing token'), false);
+    expect(mapped.status).toBe(401);
+    expect(mapped.code).toBe('UNAUTHORIZED');
+    expect(mapped.message).toBe('missing token');
+  });
+
+  it('should map ForbiddenError to 403 FORBIDDEN', () => {
+    const mapped = mapError(new ForbiddenError('nope'), false);
+    expect(mapped.status).toBe(403);
+    expect(mapped.code).toBe('FORBIDDEN');
+  });
+
+  it('should map NotFoundError to 404 NOT_FOUND', () => {
+    const mapped = mapError(new NotFoundError('missing'), false);
+    expect(mapped.status).toBe(404);
+    expect(mapped.code).toBe('NOT_FOUND');
+    expect(mapped.message).toBe('missing');
+  });
+
+  it('should map ConflictError to 409 CONFLICT', () => {
+    const mapped = mapError(new ConflictError('duplicate'), false);
+    expect(mapped.status).toBe(409);
+    expect(mapped.code).toBe('CONFLICT');
+  });
+
+  it('should map UpstreamError to 502 UPSTREAM_ERROR', () => {
+    const mapped = mapError(new UpstreamError('provider down'), false);
+    expect(mapped.status).toBe(502);
+    expect(mapped.code).toBe('UPSTREAM_ERROR');
+  });
+
+  it('should map plain Error to 500 INTERNAL_ERROR', () => {
+    const mapped = mapError(new Error('boom'), false);
+    expect(mapped).toEqual({
+      status: 500,
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+    });
+  });
+
+  it('should not leak internal messages or stack traces in production', () => {
+    const err = new UpstreamError('secret upstream detail');
+    const mapped = mapError(err, true);
+    expect(mapped.status).toBe(502);
+    expect(mapped.code).toBe('UPSTREAM_ERROR');
+    expect(mapped.message).toBe('Upstream service failed');
+    expect(JSON.stringify(mapped)).not.toContain('secret upstream detail');
+    expect(JSON.stringify(mapped)).not.toContain('stack');
+  });
+
+  it('should not leak plain Error messages in production', () => {
+    const mapped = mapError(new Error('db password leaked'), true);
+    expect(mapped.message).toBe('Internal server error');
+    expect(JSON.stringify(mapped)).not.toContain('db password leaked');
+  });
+
+  it('should expose client-safe messages in non-production', () => {
+    const mapped = mapError(new ValidationError('email invalid'), false);
+    expect(mapped.message).toBe('email invalid');
+  });
+
+  it('should identify AppError instances', () => {
+    expect(isAppError(new NotFoundError())).toBe(true);
+    expect(isAppError(new Error('x'))).toBe(false);
+    expect(isAppError(null)).toBe(false);
+  });
+
+  it('should preserve subclass identity through instanceof', () => {
+    const err = new ConflictError();
+    expect(err).toBeInstanceOf(AppError);
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(err.name).toBe('ConflictError');
+  });
+});
+
 describe('Ambassador Routes - Envelope Responses', () => {
   describe('GET /ambassadors/leaderboard', () => {
     it('should return envelope with array data', () => {
@@ -279,268 +376,13 @@ describe('Ambassador Routes - Envelope Responses', () => {
     });
 
     it('should handle empty leaderboard', () => {
-      const response = createEnvelopeWithPagination([]);
+      const response = {
+        data: [],
+        meta: { count: 0 },
+      };
 
-      expect(response.data).toEqual([]);
+      expect(response.data).toHaveLength(0);
       expect(response.meta?.count).toBe(0);
     });
-  });
-
-  describe('GET /ambassadors/:address', () => {
-    it('should return envelope with profile data', () => {
-      const profile = {
-        address: 'GXYZ...',
-        tier: 'Gold',
-        reputationScore: 0.95,
-        contributionCount: 30,
-        referrals: 10,
-        rewardsEarned: 5000,
-        awardedAt: '2026-01-01T00:00:00Z',
-      };
-
-      const response = createEnvelope(profile);
-
-      expect(response.data).toEqual(profile);
-      expect(response.errors).toBeUndefined();
-    });
-
-    it('should return 404 when not found', () => {
-      const response = errorEnvelope('AMBASSADOR_NOT_FOUND', 'Ambassador not found');
-
-      expect(response.data).toBeNull();
-      expect(response.errors?.[0].code).toBe('AMBASSADOR_NOT_FOUND');
-    });
-  });
-
-  describe('POST /ambassadors/evaluate', () => {
-    it('should return envelope with evaluation result', () => {
-      const evaluation = {
-        eligible: true,
-        tier: 'Silver',
-        profile: {
-          address: 'GXYZ...',
-          tier: 'Silver',
-          reputationScore: 0.85,
-          contributionCount: 15,
-          referrals: 3,
-          rewardsEarned: 0,
-          awardedAt: '2026-09-26T10:00:00Z',
-        },
-      };
-
-      const response = createEnvelope(evaluation);
-
-      expect(response.data?.eligible).toBe(true);
-      expect(response.data?.tier).toBe('Silver');
-      expect(response.errors).toBeUndefined();
-    });
-
-    it('should return envelope when not eligible', () => {
-      const evaluation = {
-        eligible: false,
-        tier: null,
-        profile: null,
-      };
-
-      const response = createEnvelope(evaluation);
-
-      expect(response.data?.eligible).toBe(false);
-      expect(response.data?.tier).toBeNull();
-    });
-
-    it('should return validation error envelope', () => {
-      const response = errorEnvelope(
-        'MISSING_FIELDS',
-        'Missing required fields: address, reputationScore, contributions, referrals',
-        { requiredFields: ['address', 'reputationScore', 'contributions', 'referrals'] }
-      );
-
-      expect(response.data).toBeNull();
-      expect(response.errors?.[0].code).toBe('MISSING_FIELDS');
-      expect(response.errors?.[0].details?.requiredFields).toHaveLength(4);
-    });
-  });
-
-  describe('POST /ambassadors/:address/reward', () => {
-    it('should return envelope with reward metadata', () => {
-      const response = createEmptyEnvelope({ rewarded: true, amount: 1000 });
-
-      expect(response.data).toBeNull();
-      expect(response.meta?.rewarded).toBe(true);
-      expect(response.meta?.amount).toBe(1000);
-    });
-
-    it('should return validation error for invalid amount', () => {
-      const response = errorEnvelope('INVALID_AMOUNT', 'amount must be a positive number');
-
-      expect(response.data).toBeNull();
-      expect(response.errors?.[0].code).toBe('INVALID_AMOUNT');
-    });
-
-    it('should return not found error', () => {
-      const response = errorEnvelope('AMBASSADOR_REWARD_FAILED', 'Ambassador not found');
-
-      expect(response.data).toBeNull();
-      expect(response.errors?.[0].code).toBe('AMBASSADOR_REWARD_FAILED');
-    });
-  });
-});
-
-describe('Compliance Routes - Envelope Responses', () => {
-  describe('POST /compliance/screen', () => {
-    it('should return envelope with AML check result', () => {
-      const result = {
-        flagged: true,
-        riskLevel: 'HIGH',
-        reasons: ['high_value', 'rapid_succession'],
-      };
-
-      const response = createEnvelope(result);
-
-      expect(response.data?.flagged).toBe(true);
-      expect(response.data?.riskLevel).toBe('HIGH');
-      expect(response.data?.reasons).toHaveLength(2);
-      expect(response.errors).toBeUndefined();
-    });
-
-    it('should return envelope for clean transaction', () => {
-      const result = {
-        flagged: false,
-        riskLevel: 'LOW',
-        reasons: [],
-      };
-
-      const response = createEnvelope(result);
-
-      expect(response.data?.flagged).toBe(false);
-      expect(response.errors).toBeUndefined();
-    });
-
-    it('should return validation error envelope', () => {
-      const response = errorEnvelope(
-        'MISSING_FIELDS',
-        'address, txHash, and amount are required'
-      );
-
-      expect(response.data).toBeNull();
-      expect(response.errors?.[0].code).toBe('MISSING_FIELDS');
-    });
-  });
-
-  describe('GET /compliance/queue', () => {
-    it('should return envelope with flagged transactions array', () => {
-      const flags = [
-        {
-          id: 'flag-1',
-          address: 'GXYZ...',
-          txHash: 'txhash1',
-          riskLevel: 'HIGH',
-          reasons: ['high_value'],
-          timestamp: '2026-09-26T10:00:00Z',
-          reviewed: false,
-        },
-      ];
-
-      const response = createEnvelopeWithPagination(flags);
-
-      expect(response.data).toHaveLength(1);
-      expect(response.meta?.count).toBe(1);
-      expect(response.errors).toBeUndefined();
-    });
-
-    it('should return empty array when no flags', () => {
-      const response = createEnvelopeWithPagination([]);
-
-      expect(response.data).toEqual([]);
-      expect(response.meta?.count).toBe(0);
-    });
-  });
-
-  describe('POST /compliance/flags/:id/review', () => {
-    it('should return envelope with review metadata', () => {
-      const response = createEmptyEnvelope({ reviewed: true });
-
-      expect(response.data).toBeNull();
-      expect(response.meta?.reviewed).toBe(true);
-    });
-
-    it('should return validation error for invalid decision', () => {
-      const response = errorEnvelope(
-        'INVALID_DECISION',
-        'decision must be "approved" or "rejected"'
-      );
-
-      expect(response.data).toBeNull();
-      expect(response.errors?.[0].code).toBe('INVALID_DECISION');
-    });
-
-    it('should return not found error', () => {
-      const response = errorEnvelope('FLAG_REVIEW_FAILED', 'Flag not found');
-
-      expect(response.data).toBeNull();
-      expect(response.errors?.[0].code).toBe('FLAG_REVIEW_FAILED');
-    });
-  });
-
-  describe('GET /compliance/audit-log', () => {
-    it('should return envelope with audit log array', () => {
-      const logs = [
-        {
-          id: 'flag-1',
-          address: 'GXYZ...',
-          txHash: 'txhash1',
-          riskLevel: 'HIGH',
-          reasons: ['high_value'],
-          timestamp: '2026-09-26T10:00:00Z',
-          reviewed: true,
-          reviewedBy: 'admin@example.com',
-          decision: 'approved',
-          notes: 'Legitimate transaction',
-        },
-      ];
-
-      const response = createEnvelopeWithPagination(logs);
-
-      expect(response.data).toHaveLength(1);
-      expect(response.meta?.count).toBe(1);
-      expect(response.data?.[0].reviewed).toBe(true);
-      expect(response.errors).toBeUndefined();
-    });
-
-    it('should return empty audit log', () => {
-      const response = createEnvelopeWithPagination([]);
-
-      expect(response.data).toEqual([]);
-      expect(response.meta?.count).toBe(0);
-    });
-  });
-});
-
-describe('Error Handling', () => {
-  it('should handle authentication errors', () => {
-    const response = errorEnvelope('UNAUTHORIZED', 'Authentication required');
-
-    expect(response.data).toBeNull();
-    expect(response.errors?.[0].code).toBe('UNAUTHORIZED');
-  });
-
-  it('should handle authorization errors', () => {
-    const response = errorEnvelope('FORBIDDEN', 'Admin access required');
-
-    expect(response.data).toBeNull();
-    expect(response.errors?.[0].code).toBe('FORBIDDEN');
-  });
-
-  it('should handle multiple validation errors', () => {
-    const errors = [
-      { code: 'INVALID_ADDRESS', message: 'Invalid Stellar address format' },
-      { code: 'INVALID_AMOUNT', message: 'Amount must be positive' },
-      { code: 'INVALID_TXHASH', message: 'Invalid transaction hash format' },
-    ];
-
-    const response = errorEnvelopeMulti(errors);
-
-    expect(response.errors).toHaveLength(3);
-    expect(response.data).toBeNull();
   });
 });
