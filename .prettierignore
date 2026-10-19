@@ -1,0 +1,38 @@
+# Build outputs
+dist/
+build/
+out/
+.next/
+
+# Dependency directories  
+node_modules/
+
+# Generated files
+src/generated/
+frontend/src/generated/
+packages/events-schema/generated/
+
+# Coverage reports
+coverage/
+
+# Rust/Cargo artifacts (not prettier targets anyway)
+target/
+*.lock
+
+# Compiled WASM
+*.wasm
+
+# Mobile build artifacts
+frontend/android/
+frontend/ios/
+mobile/android/
+mobile/ios/
+
+# Binary and static assets
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.ico
+*.woff
+*.woff2

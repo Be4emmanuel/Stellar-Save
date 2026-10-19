@@ -1,0 +1,21 @@
+# Rustfmt configuration for Stellar-Save
+# See https://rust-lang.github.io/rustfmt/?version=v1.6.0
+
+edition = "2021"
+
+# Enforce line width of 100 characters
+max_width = 100
+
+# Use fn arg lists that are 80 cols wide max before wrapping
+fn_args_layout = "Tall"
+
+# Imports
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+
+# Trailing commas in function call args and struct fields
+trailing_comma = "Vertical"
+trailing_semicolon = true
+
+# Single-line if/match arms allowed only when short enough
+condense_wildcard_suffixes = true
