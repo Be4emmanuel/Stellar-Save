@@ -10,6 +10,59 @@ This project uses a comprehensive testing strategy including:
 
 ---
 
+## Mutation Testing (`contracts/stellar-save/src/mutation_tests.rs`)
+
+`mutation_tests.rs` exists for one reason: to **kill mutants** produced by
+`cargo-mutants`. It is not a general-purpose test file — every test in it should
+fail when a specific, targeted mutation is introduced into the contract source.
+Tests that merely re-assert behaviour already covered by the property tests in
+`src/test.rs` are duplicates and should be removed rather than kept.
+
+### Running the mutation tool
+
+```bash
+# Install once (pinned tool version recommended)
+cargo install cargo-mutants --locked
+
+# Run mutation testing against the stellar-save contract only
+cd contracts/stellar-save
+cargo mutants --file src/lib.rs --file src/mutation_tests.rs
+
+# Emit a machine-readable survivor list for review
+cargo mutants --json --output mutants.json
+```
+
+`cargo mutants` recompiles the crate once per mutant and runs the test suite;
+this is slow by design. Scope it with `--file` / `--in-place` while iterating.
+
+### Recording results
+
+After each run, record the outcome in the PR description (and update this
+section when the baseline changes):
+
+| Field | Value |
+|-------|-------|
+| Tool | `cargo-mutants` |
+| Scope | `contracts/stellar-save/src/lib.rs` |
+| Mutants generated | _fill from run_ |
+| Mutants killed | _fill from run_ |
+| Survivors | _fill from run_ |
+| Kill rate | _killed / generated_ |
+| Expected kill rate | **≥ 90%** |
+
+Survivors are listed in `mutants.out/missed.txt` (or the `--json` output). Each
+survivor must either be killed by a new/kept test in `mutation_tests.rs`, or be
+explicitly justified as equivalent/unreachable in the PR.
+
+### Pruning policy
+
+- **Keep** a test only if removing it lets at least one mutant survive.
+- **Delete** tests whose assertions are already covered by the property tests
+  in `src/test.rs` (they add runtime cost without improving the kill rate).
+- Re-run `cargo mutants` after pruning and confirm the kill rate did not drop.
+
+---
+
 ## Shared Stellar SDK Mock
 
 A shared manual mock for `@stellar/stellar-sdk` eliminates live network calls and
@@ -272,151 +325,4 @@ Rules:
 
 - Use `await vi.advanceTimersByTimeAsync(ms)`, not the synchronous
   `advanceTimersByTime`, whenever a promise resolves inside the timer. The
-  async form flushes the microtask queue that the callback schedules.
-- Assert the state before and after the advance. A test that only asserts the
-  final state cannot distinguish a working timer from an immediate resolution.
-- Restore real timers in a `finally` block or `afterEach`. A leaked fake clock
-  silently breaks every later test in the file.
-- Do not mix `waitFor` with fake timers. If the wait is timer-driven, advance
-  the clock; `waitFor` polls on the same clock you just froze.
-- With `userEvent`, pass the shim: `userEvent.setup({ advanceTimers: vi.advanceTimersByTime })`.
-  Without it, user interactions hang on a frozen clock.
-
-Reference implementation: the connection-strength badge test in
-`frontend/src/test/WalletStatusIndicator.test.tsx`.
-
----
-
-## Backend Tests (Jest + ts-jest)
-
-### Running Tests
-
-```bash
-cd backend
-npm test                    # all unit tests
-```
-
-### Test Structure
-
-| Directory | Config | Purpose |
-|-----------|--------|---------|
-| `src/tests/` | `jest.config.js` | All unit tests |
-| `src/__mocks__/@stellar/` | — | Shared Jest manual mocks |
-
-### Jest version
-
-The backend uses **Jest 29** with **ts-jest 29** (ts-jest 30 is not yet released).
-The `package.json` `devDependencies` lock this at:
-```json
-{
-  "jest": "^29.7.0",
-  "ts-jest": "^29.4.9"
-}
-```
-
-If tests fail with `TypeError: this._moduleMocker.clearMocksOnScope is not a function`,
-the installed jest version is 30. Fix by running:
-```bash
-cd backend && pnpm install jest@29.7.0 --save-dev
-```
-
----
-
-## CI/CD Integration
-
-```yaml
-# Smart contracts
-- run: cargo test --workspace
-
-# Frontend
-- run: cd frontend && npm install && npm test run
-
-# Backend
-- run: cd backend && npm test
-```
-
----
-
-## Test Runtime Measurements (Stellar SDK Mock)
-
-These measurements were taken to verify the impact of the shared Stellar SDK mock
-(issue #1334 / #84). All tests run without live network calls.
-
-### Frontend (Vitest)
-
-| Metric | Baseline (2026-07-29) |
-|--------|-----------------------|
-| Total test files | 122 |
-| Tests | 840 |
-| Duration | ~226 s |
-| Stellar SDK live network calls | 0 (all via shared mock) |
-
-The 60 failing tests are **pre-existing failures** unrelated to the Stellar SDK mock
-(component rendering mismatches, missing module mocks for unrelated dependencies).
-The `useTransaction` and `useBalance` hooks that use `@stellar/stellar-sdk` pass fully.
-
-### Backend (Jest)
-
-| Metric | Baseline (2026-07-29) |
-|--------|-----------------------|
-| Key Stellar SDK test: `soroban_pool.test.ts` | PASS (10/10 tests, ~4.6 s) |
-| Key Stellar SDK test: `transaction-decoder.test.ts` | PASS via shared mock |
-| Live Soroban RPC calls | 0 (all via shared mock) |
-
-The backend has pre-existing test failures in modules that are not related to Stellar
-SDK mocking (TypeScript type errors, empty test suites, missing environment variables
-for non-Stellar services such as Redis, S3, Elasticsearch).
-
-### Runtime benefit
-
-Before the shared mock was introduced, any test touching `@stellar/stellar-sdk` would
-either fail immediately (no network in CI) or wait for real RPC timeouts (~5–30 s per
-test file). With the shared mock:
-
-- Each RPC call resolves in **< 1 ms** (in-process stub).
-- Tests that previously needed network access are now **fully offline**.
-- No flakiness from network latency or testnet congestion.
-
----
-
-## Mutation Testing
-
-Mutation testing verifies the quality of your test suite by introducing small changes (mutations) to the code and checking if tests catch them. A high mutation score indicates that tests effectively detect bugs.
-
-### What is Mutation Testing?
-
-Mutation testing works by:
-1. Creating "mutants" — small modifications to your code (e.g., changing `>` to `>=`, `+` to `-`)
-2. Running your test suite against each mutant
-3. Checking if tests fail (mutant "killed") or pass (mutant "survived")
-4. Calculating a mutation score: `killed / (killed + survived) × 100%`
-
-A surviving mutant indicates either:
-- Missing test coverage for that code path
-- Tests that don't assert the specific behavior being mutated
-
-### Rust Contracts (cargo-mutants)
-
-**Installation:**
-```bash
-cargo install cargo-mutants --locked
-```
-
-**Running locally:**
-```bash
-cd contracts/stellar-save
-
-# Run all mutations (can take 30-60 minutes)
-cargo mutants
-
-# Run with parallelism
-cargo mutants --jobs 4
-
-# Test specific files only
-cargo mutants --file src/penalty.rs --file src/pool.rs
-
-# Show caught mutants (for debugging)
-cargo mutants --caught
-```
-
-
+  async form flushes the microtask queue that the call
