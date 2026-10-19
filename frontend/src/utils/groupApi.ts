@@ -1,11 +1,23 @@
 /**
- * API utilities for group operations.
- * TODO: replace stubs with actual Soroban contract invocations.
+ * @deprecated Import from `lib/groupRepository` (types) or use
+ * `useGroupRepository()` from `lib/GroupRepositoryContext` (data access).
+ * This module is a thin compatibility shim and will be removed.
  */
 
 import type { GroupDetail, PublicGroup, GroupFilters } from '../types/group';
 
 export type { PublicGroup, GroupDetail };
+export type {
+  GroupRepository,
+  GroupData,
+  DetailedGroup,
+  GroupMember,
+  GroupContribution,
+  GroupCycle,
+} from '../lib/groupRepository';
+export { StubGroupRepository } from '../lib/groupRepository';
+
+import type { DetailedGroup } from '../lib/groupRepository';
 
 export interface GroupData {
   name: string;
@@ -17,50 +29,6 @@ export interface GroupData {
   min_members: number;
   insuranceEnabled: boolean;
   insurancePremiumRate: number;
-}
-
-export async function createGroup(data: GroupData): Promise<string> {
-  void data;
-  return Promise.resolve('mock-group-id');
-}
-
-export interface DetailedGroup extends PublicGroup {
-  totalMembers: number;
-  targetAmount: number;
-  currentAmount: number;
-  contributionFrequency: 'daily' | 'weekly' | 'monthly';
-  members: GroupMember[];
-  contributions: GroupContribution[];
-  cycles: GroupCycle[];
-  currentCycle?: GroupCycle;
-}
-
-export interface GroupMember {
-  id: string;
-  address: string;
-  name?: string;
-  joinedAt: Date;
-  totalContributions: number;
-  isActive: boolean;
-}
-
-export interface GroupContribution {
-  id: string;
-  memberId: string;
-  memberName?: string;
-  amount: number;
-  timestamp: Date;
-  transactionHash: string;
-  status: 'completed' | 'pending' | 'failed';
-}
-
-export interface GroupCycle {
-  cycleNumber: number;
-  startDate: Date;
-  endDate: Date;
-  targetAmount: number;
-  currentAmount: number;
-  status: 'active' | 'completed' | 'upcoming';
 }
 
 // Mock dataset - swap with real Soroban/Horizon fetch when ready
@@ -200,14 +168,12 @@ const MOCK_GROUPS: PublicGroup[] = [
 ];
 
 export async function fetchGroups(filters?: Partial<GroupFilters>): Promise<PublicGroup[]> {
-  // TODO: replace with actual Soroban contract invocation
   void filters;
   await new Promise((r) => setTimeout(r, 600));
   return MOCK_GROUPS;
 }
 
 export async function fetchGroup(groupId: string): Promise<DetailedGroup | null> {
-  // TODO: replace with actual Soroban contract invocation
   await new Promise((r) => setTimeout(r, 600)); // Simulate network delay
 
   const group = MOCK_GROUPS.find((g) => g.id === groupId);

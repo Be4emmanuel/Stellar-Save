@@ -48,6 +48,8 @@ export default tseslint.config(
       ),
     },
   },
+  // Test files: relax only the console rule. `@typescript-eslint/no-explicit-any`
+  // stays at `error` here so tests are held to the same typing bar as source.
   {
     files: ['src/test/**', '**/*.test.{ts,tsx}', 'e2e/**'],
     rules: {
