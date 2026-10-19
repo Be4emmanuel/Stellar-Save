@@ -75,6 +75,11 @@ pub enum ContractError {
     /// Error Code: 3008
     InsufficientBalance = 3008,
 
+    /// The submitted contribution zk proof failed cryptographic verification
+    /// or was malformed (wrong length / unparseable).
+    /// Error Code: 3010
+    InvalidProof = 3010,
+
     // Payout-related errors (4000-4999)
     /// The payout operation failed due to insufficient funds or transfer error.
     /// Error Code: 4001
@@ -236,6 +241,9 @@ impl ContractError {
             }
             ContractError::InsufficientBalance => {
                 "The member's token balance is insufficient to cover the auto-contribution amount."
+            }
+            ContractError::InvalidProof => {
+                "The submitted contribution proof failed verification or was malformed."
             }
             ContractError::CycleDeadlineExpired => {
                 "The cycle deadline has passed. Contributions are no longer accepted for this cycle."
@@ -441,6 +449,9 @@ impl ErrorRecoveryStrategy {
             }
             ContractError::InsufficientBalance => {
                 "Ensure your token balance is sufficient to cover the contribution amount before the cycle starts, or disable auto-contribution."
+            }
+            ContractError::InvalidProof => {
+                "Regenerate the zk proof for the correct group and cycle and resubmit it to verify_contribution_proof."
             }
             ContractError::CycleDeadlineExpired => {
                 "The cycle deadline has passed. Contributions are no longer accepted for this cycle."

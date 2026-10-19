@@ -27,13 +27,12 @@
  *                                                             to attach traceparent to)
  */
 
+import { env } from './env';
+
 let started = false;
 
 function enabled(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    import.meta.env.VITE_OTEL_ENABLED === 'true'
-  );
+  return typeof window !== 'undefined' && env.VITE_OTEL_ENABLED;
 }
 
 /**
@@ -41,14 +40,15 @@ function enabled(): boolean {
  * Defaults to same-origin `/api` calls plus anything in VITE_OTEL_PROPAGATE_URLS.
  */
 function propagateUrls(): Array<string | RegExp> {
-  const csv =
-    (import.meta.env.VITE_OTEL_PROPAGATE_URLS as string | undefined) ?? '/api';
-  return csv
-    .split(',')
-    .map((u) => u.trim())
-    .filter(Boolean)
-    // Escape for use as a "contains" regex so query strings still match.
-    .map((u) => new RegExp(u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const csv = env.VITE_OTEL_PROPAGATE_URLS;
+  return (
+    csv
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean)
+      // Escape for use as a "contains" regex so query strings still match.
+      .map((u) => new RegExp(u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  );
 }
 
 /**
@@ -78,12 +78,8 @@ export async function startTracing(): Promise<void> {
       import('@opentelemetry/semantic-conventions'),
     ]);
 
-    const base =
-      (import.meta.env.VITE_OTEL_EXPORTER_OTLP_ENDPOINT as string | undefined) ??
-      'http://localhost:4318';
-    const ratio = Number(
-      import.meta.env.VITE_OTEL_TRACES_SAMPLER_ARG ?? '0.1',
-    );
+    const base = env.VITE_OTEL_EXPORTER_OTLP_ENDPOINT;
+    const ratio = env.VITE_OTEL_TRACES_SAMPLER_ARG;
 
     const exporter = new OTLPTraceExporter({
       url: `${base.replace(/\/$/, '')}/v1/traces`,
@@ -91,12 +87,10 @@ export async function startTracing(): Promise<void> {
 
     const provider = new WebTracerProvider({
       resource: resourceFromAttributes({
-        [ATTR_SERVICE_NAME]:
-          (import.meta.env.VITE_OTEL_SERVICE_NAME as string | undefined) ??
-          'stellar-save-frontend',
+        [ATTR_SERVICE_NAME]: env.VITE_OTEL_SERVICE_NAME,
       }),
       sampler: new ParentBasedSampler({
-        root: new TraceIdRatioBasedSampler(Number.isFinite(ratio) ? ratio : 0.1),
+        root: new TraceIdRatioBasedSampler(ratio),
       }),
       spanProcessors: [new BatchSpanProcessor(exporter)],
     });
@@ -114,12 +108,10 @@ export async function startTracing(): Promise<void> {
     });
 
     // eslint-disable-next-line no-console
-    console.info(
-      `[tracing] OpenTelemetry web tracing enabled (sampler ratio=${ratio})`,
-    );
+    console.info(`[tracing] OpenTelemetry web tracing enabled (sampler ratio=${ratio})`);
   } catch (err) {
     started = false;
-    // eslint-disable-next-line no-console
+
     console.warn('[tracing] web tracing init failed; continuing without it', err);
   }
 }

@@ -6,7 +6,9 @@
  * contract. This module wraps those endpoints.
  */
 
-const API_BASE = (import.meta.env['VITE_API_BASE_URL'] as string | undefined) ?? '/api/v1';
+import { env } from '../lib/env';
+
+const API_BASE = env.VITE_API_BASE_URL;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,11 +30,9 @@ export interface ClaimResult {
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 export async function fetchReferralRewards(address: string): Promise<ReferralReward> {
-  const res = await fetch(
-    `${API_BASE}/referrals/${encodeURIComponent(address)}/rewards`,
-  );
+  const res = await fetch(`${API_BASE}/referrals/${encodeURIComponent(address)}/rewards`);
   if (!res.ok) throw new Error('Failed to fetch referral rewards');
-  const data = await res.json() as {
+  const data = (await res.json()) as {
     referrerAddress: string;
     pendingBalance: string;
     totalClaimed: string;
@@ -47,15 +47,15 @@ export async function fetchReferralRewards(address: string): Promise<ReferralRew
 }
 
 export async function claimReferralRewards(address: string): Promise<ClaimResult> {
-  const res = await fetch(
-    `${API_BASE}/referrals/${encodeURIComponent(address)}/claim`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-  );
+  const res = await fetch(`${API_BASE}/referrals/${encodeURIComponent(address)}/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Claim failed' })) as { error: string };
+    const err = (await res.json().catch(() => ({ error: 'Claim failed' }))) as { error: string };
     throw new Error(err.error ?? 'Claim failed');
   }
-  const data = await res.json() as { txHash: string; amountClaimed: string };
+  const data = (await res.json()) as { txHash: string; amountClaimed: string };
   return { txHash: data.txHash, amountClaimed: BigInt(data.amountClaimed) };
 }
 

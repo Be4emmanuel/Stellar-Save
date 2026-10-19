@@ -1,9 +1,13 @@
-import { Request, Response, NextFunction } from 'express';
-import { z, ZodSchema } from 'zod';
+import { z } from 'zod';
+
 import { logger } from '../logger';
 
+import type { Request, Response, NextFunction } from 'express';
+import type { ZodSchema } from 'zod';
+
+
 export interface AuthenticatedRequest extends Request {
-  user?: any;
+  user?: Record<string, unknown>;
 }
 
 export interface ValidationError {
@@ -21,7 +25,7 @@ export class ValidationMiddleware {
         next();
       } catch (err) {
         if (err instanceof z.ZodError) {
-          const errors: ValidationError[] = err.issues.map(issue => ({
+          const errors: ValidationError[] = err.issues.map((issue) => ({
             field: issue.path.join('.') || 'unknown',
             message: issue.message,
           }));
@@ -53,7 +57,7 @@ export class ValidationMiddleware {
         next();
       } catch (err) {
         if (err instanceof z.ZodError) {
-          const errors: ValidationError[] = err.issues.map(issue => ({
+          const errors: ValidationError[] = err.issues.map((issue) => ({
             field: issue.path.join('.') || 'body',
             message: issue.message,
           }));
@@ -81,11 +85,12 @@ export class ValidationMiddleware {
     return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const validated = schema.parse(req.query);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Express ParsedQs is not compatible with Zod output; cast required to assign validated query back
         req.query = validated as any;
         next();
       } catch (err) {
         if (err instanceof z.ZodError) {
-          const errors: ValidationError[] = err.issues.map(issue => ({
+          const errors: ValidationError[] = err.issues.map((issue) => ({
             field: issue.path.join('.') || 'query',
             message: issue.message,
           }));
@@ -113,11 +118,12 @@ export class ValidationMiddleware {
     return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const validated = schema.parse(req.params);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Express params type is not compatible with Zod output; cast required to assign validated params back
         req.params = validated as any;
         next();
       } catch (err) {
         if (err instanceof z.ZodError) {
-          const errors: ValidationError[] = err.issues.map(issue => ({
+          const errors: ValidationError[] = err.issues.map((issue) => ({
             field: issue.path.join('.') || 'params',
             message: issue.message,
           }));

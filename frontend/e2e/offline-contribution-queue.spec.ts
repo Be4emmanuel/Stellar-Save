@@ -1,4 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- page.evaluate callbacks run in browser context; IndexedDB and window property access requires `any` to bypass TypeScript's strict browser types */
 import { injectMockWallet } from './helpers/stellar-standalone';
 
 /**

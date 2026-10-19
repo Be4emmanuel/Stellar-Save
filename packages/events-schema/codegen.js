@@ -65,7 +65,7 @@ for (const [topic, def] of Object.entries(events)) {
 // Union type
 lines.push(`export type ContractEvent =`);
 typeNames.forEach((name, i) => {
-  const sep = i < typeNames.length - 1 ? ' |' : ';';
+  const sep = i < typeNames.length - 1 ? '' : ';';
   lines.push(`  | ${name}${sep}`);
 });
 lines.push('');

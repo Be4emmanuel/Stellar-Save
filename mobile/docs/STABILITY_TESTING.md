@@ -91,7 +91,12 @@ These values are set conservatively for testnet latency. Tighten them only if
 | Flow | Fixed waits added | Seed fix | Status |
 |---|---|---|---|
 | `onboarding.yaml` | — (no async ops) | — | ✅ no changes needed |
-| `smoke.yaml` | — (navigation only) | — | ✅ no changes needed |
+| `onboarding_full.yaml` | `wallet-setup-done` 15 s, `kyc-form-screen` 10 s, `kyc-status-screen` 30 s, `dashboard-screen` 10 s | — | ✅ new (issue #1732) |
+| `onboarding_wallet_setup.yaml` | `wallet-setup-screen` 10 s, `wallet-setup-done` 15 s | import secret key fixture | ✅ new (issue #1732) |
+| `onboarding_kyc_form.yaml` | `kyc-form-screen` 15 s, `kyc-camera-viewfinder` 10 s, `kyc-status-screen` 30 s | camera permission grant | ✅ new (issue #1732) |
+| `onboarding_kyc_status.yaml` | `kyc-status-screen` 15 s | `MAESTRO_KYC_STATUS` env seed | ✅ new (issue #1732) |
+| `onboarding_biometric_auth.yaml` | `welcome-screen` 15 s, `pin-screen` 15 s | `MAESTRO_BIOMETRIC_AVAILABLE` env seed | ✅ new (issue #1732) |
+| `smoke.yaml` | updated onboarding section to use new testIDs | — | ✅ updated |
 | `create_group.yaml` | `group-created-success` 30 s, `group-detail-screen` 10 s | — | ✅ fixed |
 | `contribute.yaml` | `contribution-success-modal` 30 s, `group-detail-screen` 10 s | — | ✅ fixed |
 | `join_group.yaml` | `join-success-message` 30 s, `group-detail-screen` 10 s | — | ✅ fixed |

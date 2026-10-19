@@ -171,6 +171,58 @@ pub const TTL_THRESHOLD_LEDGERS: u32 = 518_400; // 30 days
 /// Unit: ledgers
 pub const TTL_EXTEND_TO_LEDGERS: u32 = 6_307_200; // 365 days
 
+// ─── Time and Stroop Constants for Testing and Core Workflows ─────────────────
+
+/// Conversion rate: 1 XLM = 10,000,000 stroops (standard contribution unit).
+///
+/// Unit: stroops
+pub const STROOPS_PER_XLM: i128 = 10_000_000;
+
+/// Default contribution amount used in test groups and mocks (1 XLM = 10,000,000 stroops).
+///
+/// Unit: stroops
+pub const DEFAULT_TEST_CONTRIBUTION_AMOUNT: i128 = STROOPS_PER_XLM;
+
+/// One hour in seconds (60 seconds * 60 minutes).
+///
+/// Unit: seconds
+pub const ONE_HOUR_SECONDS: u64 = 3_600;
+
+/// Two hours in seconds (2 * 3,600).
+///
+/// Unit: seconds
+pub const TWO_HOURS_SECONDS: u64 = 7_200;
+
+/// Three hours in seconds (3 * 3,600).
+///
+/// Unit: seconds
+pub const THREE_HOURS_SECONDS: u64 = 10_800;
+
+/// Default grace period allowed for cycle deadline expiration checks to tolerate clock drift.
+///
+/// Unit: seconds
+pub const DEFAULT_GRACE_PERIOD_SECONDS: u64 = 60;
+
+/// Canonical base timestamp used across unit tests and mocks (1,000,000 seconds post-epoch).
+///
+/// Unit: seconds (Unix epoch timestamp)
+pub const DEFAULT_TEST_TIMESTAMP: u64 = 1_000_000;
+
+/// Fixed sample timestamp (Fri Feb 13 23:31:30 2009 UTC) used in record creation tests.
+///
+/// Unit: seconds (Unix epoch timestamp)
+pub const ARBITRARY_TEST_TIMESTAMP: u64 = 1_234_567_890;
+
+/// Sample elapsed duration representing roughly half of a weekly cycle (~3.47 days).
+///
+/// Unit: seconds
+pub const MID_CYCLE_OFFSET_SECONDS: u64 = 300_000;
+
+/// Sentinel group identifier that is guaranteed not to exist in fresh test environments.
+///
+/// Unit: id
+pub const NON_EXISTENT_GROUP_ID: u64 = 9_999;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,14 +271,8 @@ mod tests {
             DEFAULT_MAX_CYCLE_DURATION >= DEFAULT_MIN_CYCLE_DURATION,
             "Max cycle duration must be >= min"
         );
-        assert_eq!(
-            ONE_DAY_SECONDS, 86_400,
-            "One day must be 86400 seconds"
-        );
-        assert_eq!(
-            ONE_WEEK_SECONDS, 604_800,
-            "One week must be 604800 seconds"
-        );
+        assert_eq!(ONE_DAY_SECONDS, 86_400, "One day must be 86400 seconds");
+        assert_eq!(ONE_WEEK_SECONDS, 604_800, "One week must be 604800 seconds");
     }
 
     #[test]
@@ -254,9 +300,22 @@ mod tests {
     #[test]
     fn test_deadline_extension_max_is_one_week() {
         assert_eq!(
-            MAX_DEADLINE_EXTENSION_SECONDS,
-            ONE_WEEK_SECONDS,
+            MAX_DEADLINE_EXTENSION_SECONDS, ONE_WEEK_SECONDS,
             "Max deadline extension must be 7 days"
         );
+    }
+
+    #[test]
+    fn test_time_and_stroop_constants() {
+        assert_eq!(STROOPS_PER_XLM, 10_000_000);
+        assert_eq!(DEFAULT_TEST_CONTRIBUTION_AMOUNT, 10_000_000);
+        assert_eq!(ONE_HOUR_SECONDS, 3_600);
+        assert_eq!(TWO_HOURS_SECONDS, 7_200);
+        assert_eq!(THREE_HOURS_SECONDS, 10_800);
+        assert_eq!(DEFAULT_GRACE_PERIOD_SECONDS, 60);
+        assert_eq!(DEFAULT_TEST_TIMESTAMP, 1_000_000);
+        assert_eq!(ARBITRARY_TEST_TIMESTAMP, 1_234_567_890);
+        assert_eq!(MID_CYCLE_OFFSET_SECONDS, 300_000);
+        assert_eq!(NON_EXISTENT_GROUP_ID, 9_999);
     }
 }

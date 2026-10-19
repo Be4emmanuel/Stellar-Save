@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import { getExplorerTxUrl } from '../utils/explorerUrl';
 import './ContributionSuccessModal.css';
 
@@ -261,11 +262,19 @@ export function ContributionSuccessModal({
 
         <h2
           id="success-modal-title"
-          style={{ margin: '0 0 4px', fontSize: '20px', fontWeight: 700, color: 'var(--color-text-primary)' }}
+          style={{
+            margin: '0 0 4px',
+            fontSize: '20px',
+            fontWeight: 700,
+            color: 'var(--color-text-primary)',
+          }}
         >
           Contribution Successful!
         </h2>
-        <p id="success-modal-description" style={{ margin: '0 0 16px', color: '#6b7280', fontSize: '14px' }}>
+        <p
+          id="success-modal-description"
+          style={{ margin: '0 0 16px', color: '#6b7280', fontSize: '14px' }}
+        >
           {amount} XLM · Cycle #{cycleId}
         </p>
 

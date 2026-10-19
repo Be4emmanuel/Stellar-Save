@@ -1,4 +1,5 @@
 import { useState } from 'react';
+
 import { useWallet } from '../hooks/useWallet';
 import './NetworkIndicator.css';
 
@@ -10,7 +11,7 @@ export function NetworkIndicator() {
 
   const currentNetwork = network || 'testnet';
 
-  const handleNetworkSwitch = (newNetwork: string) => {
+  const handleNetworkSwitch = (_newNetwork: string) => {
     // TODO: Implement network switching logic
     setShowSwitcher(false);
   };
@@ -29,11 +30,7 @@ export function NetworkIndicator() {
       </button>
 
       {showSwitcher && (
-        <div
-          className="network-switcher"
-          role="listbox"
-          aria-label="Select network"
-        >
+        <div className="network-switcher" role="listbox" aria-label="Select network">
           {NETWORKS.map((net) => (
             <button
               key={net}

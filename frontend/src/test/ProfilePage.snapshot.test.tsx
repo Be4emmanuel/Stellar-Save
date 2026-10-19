@@ -4,8 +4,9 @@
  * Captures rendering state to detect unintended UI regressions
  */
 import { render } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import ProfilePage from '../pages/ProfilePage';
 
 // ── Mock dependencies ─────────────────────────────────────────────────────────
@@ -17,7 +18,9 @@ vi.mock('../ui', () => ({
       {children}
     </div>
   ),
-  AppCard: ({ children }: { children: React.ReactNode }) => <div data-testid="app-card">{children}</div>,
+  AppCard: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="app-card">{children}</div>
+  ),
 }));
 
 vi.mock('../hooks/useWallet', () => ({

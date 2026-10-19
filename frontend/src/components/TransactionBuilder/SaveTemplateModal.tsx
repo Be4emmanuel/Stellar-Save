@@ -9,7 +9,6 @@ import {
   Typography,
   Box,
   Alert,
-  IconButton,
 } from '@mui/material';
 import { Button } from '../Button';
 import { copyToClipboard } from '../../lib/clipboard';

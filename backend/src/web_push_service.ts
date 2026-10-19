@@ -1,7 +1,9 @@
 import webpush from 'web-push';
+
+import { config } from './config';
 import { PrismaClient } from './generated/prisma/client';
 import { logger } from './logger';
-import { config } from './config';
+import { prisma } from './prisma_client';
 
 export interface WebPushSubscriptionInput {
   endpoint: string;
@@ -18,30 +20,51 @@ export interface PushPayload {
   data?: Record<string, unknown>;
 }
 
+/**
+ * Web Push service for sending browser push notifications.
+ *
+ * Refactored for dependency injection (Issue #1701):
+ * - PrismaClient, config, and logger are accepted via constructor
+ * - Tests inject mocks instead of hitting a real DB
+ */
+
+export interface WebPushServiceDeps {
+  db?: PrismaClient;
+  config?: { vapid: { publicKey: string; privateKey: string; subject: string } };
+  logger?: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void; error: (...a: unknown[]) => void };
+}
+
 export class WebPushService {
   private prisma: PrismaClient;
   private enabled: boolean;
+  private readonly log: NonNullable<WebPushServiceDeps['logger']>;
+  private vapidPublicKey: string;
 
-  constructor() {
-    this.prisma = new (PrismaClient as any)();
+  constructor(deps?: WebPushServiceDeps) {
+    this.prisma = deps?.db ?? prisma;
+    this.log = deps?.logger ?? logger;
 
-    const publicKey = config.vapid.publicKey;
-    const privateKey = config.vapid.privateKey;
-    const subject = config.vapid.subject;
+    const resolvedConfig = deps?.config ?? config;
+    const publicKey = resolvedConfig.vapid.publicKey;
+    const privateKey = resolvedConfig.vapid.privateKey;
+    const subject = resolvedConfig.vapid.subject;
+    this.vapidPublicKey = publicKey;
 
     if (!publicKey || !privateKey) {
-      logger.warn('VAPID keys not configured — web push disabled. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.');
+      this.log.warn(
+        'VAPID keys not configured — web push disabled. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.'
+      );
       this.enabled = false;
       return;
     }
 
     webpush.setVapidDetails(subject, publicKey, privateKey);
     this.enabled = true;
-    logger.info('WebPushService initialized with VAPID keys');
+    this.log.info('WebPushService initialized with VAPID keys');
   }
 
   getVapidPublicKey(): string {
-    return config.vapid.publicKey;
+    return this.vapidPublicKey;
   }
 
   isEnabled(): boolean {
@@ -59,12 +82,12 @@ export class WebPushService {
         auth: subscription.keys.auth,
       },
     });
-    logger.info('Push subscription saved', { userId });
+    this.log.info('Push subscription saved', { userId });
   }
 
   async deleteSubscription(endpoint: string): Promise<void> {
     await this.prisma.pushSubscription.deleteMany({ where: { endpoint } });
-    logger.info('Push subscription deleted', { endpoint });
+    this.log.info('Push subscription deleted', { endpoint });
   }
 
   async deleteSubscriptionsForUser(userId: string): Promise<void> {
@@ -76,7 +99,7 @@ export class WebPushService {
     if (!this.enabled) return;
 
     const subs = await this.prisma.pushSubscription.findMany({ where: { userId } });
-    await Promise.allSettled(subs.map(sub => this.sendToSubscription(sub, payload)));
+    await Promise.allSettled(subs.map((sub) => this.sendToSubscription(sub, payload)));
   }
 
   // Send to all stored subscriptions (broadcast)
@@ -84,7 +107,7 @@ export class WebPushService {
     if (!this.enabled) return;
 
     const subs = await this.prisma.pushSubscription.findMany();
-    await Promise.allSettled(subs.map(sub => this.sendToSubscription(sub, payload)));
+    await Promise.allSettled(subs.map((sub) => this.sendToSubscription(sub, payload)));
   }
 
   // Send to users whose userId matches any of the given wallet addresses
@@ -97,12 +120,14 @@ export class WebPushService {
 
     if (subs.length === 0) {
       // No direct address match — fall back to broadcast so no event is silently dropped
-      logger.info('No subscriptions matched member addresses, broadcasting push', { memberAddresses });
+      this.log.info('No subscriptions matched member addresses, broadcasting push', {
+        memberAddresses,
+      });
       await this.sendToAll(payload);
       return;
     }
 
-    await Promise.allSettled(subs.map(sub => this.sendToSubscription(sub, payload)));
+    await Promise.allSettled(subs.map((sub) => this.sendToSubscription(sub, payload)));
   }
 
   private async sendToSubscription(
@@ -114,13 +139,19 @@ export class WebPushService {
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         JSON.stringify(payload)
       );
-    } catch (err: any) {
-      if (err.statusCode === 410 || err.statusCode === 404) {
+    } catch (err: unknown) {
+      const statusCode = (err as { statusCode?: number }).statusCode;
+      if (statusCode === 410 || statusCode === 404) {
         // Subscription has expired or been revoked — clean it up
-        await this.prisma.pushSubscription.deleteMany({ where: { endpoint: sub.endpoint } }).catch(() => {});
-        logger.info('Removed expired push subscription', { endpoint: sub.endpoint });
+        await this.prisma.pushSubscription
+          .deleteMany({ where: { endpoint: sub.endpoint } })
+          .catch(() => {});
+        this.log.info('Removed expired push subscription', { endpoint: sub.endpoint });
       } else {
-        logger.error('Failed to send push notification', { endpoint: sub.endpoint, error: String(err) });
+        this.log.error('Failed to send push notification', {
+          endpoint: sub.endpoint,
+          error: String(err),
+        });
       }
     }
   }

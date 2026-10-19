@@ -15,3 +15,5 @@ export {
   clampOffset,
   isPositiveNumber,
 } from './validation';
+
+export { withRetry, computeBackoffDelay, isTransientHttpError, type RetryOptions } from './retry';

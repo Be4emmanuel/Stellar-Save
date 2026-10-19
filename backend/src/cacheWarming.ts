@@ -1,4 +1,13 @@
+/**
+ * Cache warming job for preloading frequently accessed data.
+ *
+ * Periodically loads cache with commonly accessed endpoints to reduce
+ * initial cache misses and improve user experience.
+ */
+
 import { set } from './redis';
+import { CacheKeyBuilder } from './lib/cache-key-builder';
+import { CACHE_TTL_SECONDS } from './lib/cache-config';
 
 const warmData = {
   '/api/retirements': [
@@ -9,19 +18,21 @@ const warmData = {
 };
 
 export const startWarmingJob = async () => {
-  console.log('🔥 Starting cache warming job...');
+  logger.info('Starting cache warming job');
 
   for (const [endpoint, data] of Object.entries(warmData)) {
-    await set(`cache:${endpoint}`, data, 3600);
+    const cacheKey = CacheKeyBuilder.cacheWarming(endpoint);
+    await set(cacheKey, data, CACHE_TTL_SECONDS.CACHE_WARMING_DEFAULT);
     console.log(`Warmed: ${endpoint}`);
   }
 
-  console.log('✅ Cache warming completed');
+  logger.info('Cache warming completed');
 
   setInterval(async () => {
-    console.log('🔄 Running scheduled cache warming...');
+    logger.debug('Running scheduled cache warming');
     for (const [endpoint, data] of Object.entries(warmData)) {
-      await set(`cache:${endpoint}`, data, 3600);
+      const cacheKey = CacheKeyBuilder.cacheWarming(endpoint);
+      await set(cacheKey, data, CACHE_TTL_SECONDS.CACHE_WARMING_DEFAULT);
     }
-  }, 3600000);
+  }, CACHE_TTL_SECONDS.CACHE_WARMING_DEFAULT * 1000);
 };

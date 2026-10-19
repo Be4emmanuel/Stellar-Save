@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemberList, Member } from '../components/MemberList';
+import { describe, it, expect } from 'vitest';
+
+import { MemberList } from '../components/MemberList';
+
+import type { Member } from '../components/MemberList';
 
 const mockMembers: Member[] = [
   {
@@ -92,9 +95,7 @@ describe('MemberList', () => {
   });
 
   it('applies custom className', () => {
-    const { container } = render(
-      <MemberList members={mockMembers} className="custom-class" />
-    );
+    const { container } = render(<MemberList members={mockMembers} className="custom-class" />);
     expect(container.querySelector('.custom-class')).toBeInTheDocument();
   });
 

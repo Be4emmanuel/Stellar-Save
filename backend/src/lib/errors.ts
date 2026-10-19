@@ -6,6 +6,21 @@ export interface ErrorEnvelope {
   timestamp: string;
 }
 
+/**
+ * Standard application error hierarchy.
+ *
+ * Services should throw a subclass of `AppError` instead of raw `Error`s or
+ * returned error objects. Each subclass carries a stable `code` and the HTTP
+ * `statusCode` it maps to; `errorMiddleware` and `auth_middleware` use these
+ * to build responses.
+ *
+ *   ValidationError   400  VALIDATION_ERROR
+ *   UnauthorizedError 401  UNAUTHORIZED   (alias: AuthError)
+ *   ForbiddenError    403  FORBIDDEN
+ *   NotFoundError     404  NOT_FOUND
+ *   ConflictError     409  CONFLICT
+ *   CircuitBreakerOpenError 503 CIRCUIT_OPEN
+ */
 export class AppError extends Error {
   constructor(
     public readonly code: string,
@@ -68,6 +83,12 @@ export class ImageValidationError extends AppError {
 }
 
 export { AppError as ApiError };
+export { UnauthorizedError as AuthError };
+
+/** HTTP status code for any thrown value (500 for non-AppError). */
+export function statusCodeOf(err: unknown): number {
+  return err instanceof AppError ? err.statusCode : 500;
+}
 
 export function toEnvelope(err: unknown, correlationId: string): ErrorEnvelope {
   const timestamp = new Date().toISOString();

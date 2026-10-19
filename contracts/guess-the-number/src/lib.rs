@@ -84,9 +84,11 @@ impl GuessTheNumber {
         env.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 
-    /// readonly function to get the current number
-    /// `pub(crate)` makes it accessible in the same crate, but not outside of it
-    pub(crate) fn number(env: &Env) -> u64 {
+    /// Reads the current secret number from instance storage.
+    ///
+    /// **Private** — only accessible within this file.  Use `env.as_contract`
+    /// in tests to invoke this function for assertion purposes.
+    fn number(env: &Env) -> u64 {
         env.storage()
             .instance()
             .get(THE_NUMBER)

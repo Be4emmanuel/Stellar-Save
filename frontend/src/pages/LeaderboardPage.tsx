@@ -1,9 +1,10 @@
 import { Stack, Typography, Box } from '@mui/material';
-import { AppLayout, AppCard } from '../ui';
+
+import { Button } from '../components/Button';
 import { Leaderboard } from '../components/Leaderboard';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import { useWallet } from '../hooks/useWallet';
-import { Button } from '../components/Button';
+import { AppLayout, AppCard } from '../ui';
 
 export default function LeaderboardPage() {
   const { data, isLoading, error, period, setPeriod, refresh } = useLeaderboard('all-time');
@@ -16,9 +17,19 @@ export default function LeaderboardPage() {
       footerText="Stellar Save - Built for transparent, on-chain savings"
     >
       <Stack spacing={3}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 2,
+          }}
+        >
           <Stack spacing={0.5}>
-            <Typography variant="h4" fontWeight={700}>Leaderboard</Typography>
+            <Typography variant="h4" fontWeight={700}>
+              Leaderboard
+            </Typography>
             <Typography variant="body2" color="text.secondary">
               Rankings based on completion rate, on-time contributions, and total volume.
             </Typography>

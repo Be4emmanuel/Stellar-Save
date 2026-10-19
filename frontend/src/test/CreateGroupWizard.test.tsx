@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { CreateGroupForm } from '../components/CreateGroupForm';
 
 beforeEach(() => {
@@ -149,7 +150,7 @@ describe('Draft save and discard', () => {
         minMembers: '2',
         insuranceEnabled: false,
         insurancePremiumRate: '5',
-      }),
+      })
     );
     render(<CreateGroupForm onSubmit={vi.fn()} />);
     expect(screen.getByLabelText(/group name/i)).toHaveValue('Resumed Group');

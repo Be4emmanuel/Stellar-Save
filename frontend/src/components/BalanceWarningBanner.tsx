@@ -1,5 +1,6 @@
-import { useState } from 'react';
 import { Alert, AlertTitle, Box, Button, Collapse, Link, Stack, Typography } from '@mui/material';
+import { useState } from 'react';
+
 import type { BalanceWarning } from '../hooks/useBalanceWarning';
 
 interface Props {
@@ -51,14 +52,12 @@ export function BalanceWarningBanner({ warning }: Props) {
         <AlertTitle sx={{ fontWeight: 'bold' }}>Insufficient Balance</AlertTitle>
         <Box>
           <Typography variant="body2">
-            Your wallet has{' '}
-            <strong>{fmt(warning.currentBalance)} XLM</strong> but your upcoming
-            contributions require{' '}
-            <strong>{fmt(warning.requiredAmount)} XLM</strong>.
+            Your wallet has <strong>{fmt(warning.currentBalance)} XLM</strong> but your upcoming
+            contributions require <strong>{fmt(warning.requiredAmount)} XLM</strong>.
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.5 }}>
-            You need <strong>{fmt(warning.shortfall)} more XLM</strong> to cover
-            all active group contributions.
+            You need <strong>{fmt(warning.shortfall)} more XLM</strong> to cover all active group
+            contributions.
           </Typography>
         </Box>
       </Alert>

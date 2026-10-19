@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
+
 import { useToast } from '../components/Toast/useToast';
+
 import type { ToastAction } from '../components/Toast/types';
 
 /**
@@ -104,25 +106,25 @@ export function useErrorToast(): UseErrorToastReturn {
         ...(options.onClose ? { onClose: options.onClose } : {}),
       });
     },
-    [addToast],
+    [addToast]
   );
 
   const showNetworkError = useCallback(
     (error: unknown, options?: Omit<ShowErrorOptions, 'kind'>) =>
       showError(error, { ...options, kind: 'network' }),
-    [showError],
+    [showError]
   );
 
   const showValidationError = useCallback(
     (error: unknown, options?: Omit<ShowErrorOptions, 'kind'>) =>
       showError(error, { ...options, kind: 'validation' }),
-    [showError],
+    [showError]
   );
 
   const showContractError = useCallback(
     (error: unknown, options?: Omit<ShowErrorOptions, 'kind'>) =>
       showError(error, { ...options, kind: 'contract' }),
-    [showError],
+    [showError]
   );
 
   return { showError, showNetworkError, showValidationError, showContractError };

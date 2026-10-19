@@ -12,7 +12,6 @@
  */
 import React, {
   createContext,
-  useContext,
   type ReactNode,
 } from 'react';
 import { WalletConnectionProvider, useWalletConnection } from './WalletConnectionProvider';
@@ -37,7 +36,7 @@ export const WalletContext = createContext<WalletContextValue | undefined>(undef
  */
 function WalletContextBridge({ children }: { children: ReactNode }) {
   const connection = useWalletConnection();
-  const balance = useWalletBalance();
+  useWalletBalance();
   const signing = useWalletSigning();
 
   const value: WalletContextValue = {

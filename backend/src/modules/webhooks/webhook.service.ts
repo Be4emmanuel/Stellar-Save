@@ -1,10 +1,14 @@
 // backend/src/modules/webhooks/webhook.service.ts
+import * as crypto from 'crypto';
+
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import * as crypto from 'crypto';
+
 import { logger } from '../../logger';
+import { MAX_ATTEMPTS, BASE_DELAY_MS } from '../../lib/webhook_retry';
+
+import type { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class WebhookService {
@@ -21,8 +25,8 @@ export class WebhookService {
     this.webhookQueue = new Queue('webhook-delivery', {
       connection: new Redis(redisUrl),
       defaultJobOptions: {
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 5000 },
+        attempts: MAX_ATTEMPTS,
+        backoff: { type: 'exponential', delay: BASE_DELAY_MS },
         removeOnComplete: true,
         removeOnFail: 100,
       },
@@ -47,7 +51,7 @@ export class WebhookService {
     return { success: true };
   }
 
-  async dispatchEvent(event: string, payload: any) {
+  async dispatchEvent(event: string, payload: Record<string, unknown>) {
     logger.info(`Event dispatched: ${event}`, payload);
     // TODO: Implement real logic with Prisma later
   }

@@ -26,6 +26,7 @@ import {
   type SyncQueueItem,
 } from './db';
 import { fetchGroup, fetchGroups, type DetailedGroup } from '../utils/groupApi';
+
 import type { PublicGroup } from '../types/group';
 
 const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
@@ -152,7 +153,7 @@ export async function syncAll(): Promise<void> {
     await updateSyncMetadata({ lastSync: new Date(), isOnline: true });
 
     notifySyncStatus('idle');
-  } catch (error) {
+  } catch {
     notifySyncStatus('error');
   } finally {
     isCurrentlySyncing = false;
@@ -256,10 +257,7 @@ async function refreshCache(): Promise<void> {
 /**
  * Queue an action for later execution (when offline)
  */
-export async function queueAction(
-  type: SyncQueueItem['type'],
-  payload: unknown
-): Promise<string> {
+export async function queueAction(type: SyncQueueItem['type'], payload: unknown): Promise<string> {
   const id = await addToSyncQueue({
     type,
     payload,

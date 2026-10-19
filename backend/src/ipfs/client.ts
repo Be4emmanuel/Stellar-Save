@@ -1,3 +1,5 @@
+import { withRetry } from '@stellar-save/shared-utils';
+
 import { config } from '../config';
 import { logger } from '../logger';
 
@@ -17,6 +19,11 @@ export interface IpfsPinStatus {
 }
 
 export interface RetryConfig {
+  /**
+   * Number of retries *after* the initial attempt, so 2 means up to 3 calls in
+   * total. Retained as-is for backwards compatibility; the shared utility
+   * counts total attempts instead, so this is translated at the call site.
+   */
   maxRetries?: number;
   initialDelayMs?: number;
   maxDelayMs?: number;
@@ -30,30 +37,17 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   backoffMultiplier: 2,
 };
 
-async function exponentialBackoff(
-  attempt: number,
-  config: Required<RetryConfig>,
-): Promise<void> {
-  const delayMs = Math.min(
-    config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt),
-    config.maxDelayMs,
-  );
-  await new Promise(resolve => setTimeout(resolve, delayMs));
-}
-
 async function ipfsFetch(
   baseUrl: string,
   path: string,
-  options: { method?: string; body?: FormData; timeout?: number; retryConfig?: RetryConfig } = {},
+  options: { method?: string; body?: FormData; timeout?: number; retryConfig?: RetryConfig } = {}
 ): Promise<Response> {
   const url = new URL(`${baseUrl}${path}`);
   const { method = 'POST', body, timeout = 30000, retryConfig } = options;
   const finalRetryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
 
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= finalRetryConfig.maxRetries; attempt++) {
-    try {
+  return withRetry(
+    async () => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeout);
 
@@ -67,27 +61,36 @@ async function ipfsFetch(
       } finally {
         clearTimeout(timer);
       }
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-
-      if (attempt < finalRetryConfig.maxRetries) {
-        await exponentialBackoff(attempt, finalRetryConfig);
+    },
+    {
+      // `maxRetries` excludes the initial attempt; `withRetry` counts it.
+      attempts: finalRetryConfig.maxRetries + 1,
+      initialDelayMs: finalRetryConfig.initialDelayMs,
+      maxDelayMs: finalRetryConfig.maxDelayMs,
+      backoffMultiplier: finalRetryConfig.backoffMultiplier,
+      // Delays here stay deterministic: the client's tests assert on wall-clock
+      // elapsed time, and IPFS pinning is not a high-contention path where
+      // lockstep retries are a concern.
+      jitter: 0,
+      onRetry: ({ attempt, error }) => {
         logger.debug('[ipfs] retrying after error', {
           attempt: attempt + 1,
           path,
-          error: lastError.message,
+          error: error instanceof Error ? error.message : String(error),
         });
-      }
+      },
     }
-  }
-
-  throw lastError || new Error('IPFS fetch failed');
+  ).catch((error: unknown) => {
+    // `withRetry` rethrows the original value, but this client has always
+    // surfaced an Error, and callers read `.message` off it.
+    throw error instanceof Error ? error : new Error(String(error));
+  });
 }
 
 async function ipfsJson<T>(
   baseUrl: string,
   path: string,
-  options: { method?: string; body?: FormData; timeout?: number; retryConfig?: RetryConfig } = {},
+  options: { method?: string; body?: FormData; timeout?: number; retryConfig?: RetryConfig } = {}
 ): Promise<T> {
   const res = await ipfsFetch(baseUrl, path, options);
   if (!res.ok) {
@@ -126,7 +129,7 @@ export class IpfsClient {
     const result = await ipfsJson<{ Pins: string[] }>(
       this.baseUrl,
       `/api/v0/pin/add?${params.toString()}`,
-      { timeout: this.timeout, retryConfig: this.retryConfig },
+      { timeout: this.timeout, retryConfig: this.retryConfig }
     );
     return { cid, pinned: result.Pins.includes(cid) };
   }
@@ -136,7 +139,7 @@ export class IpfsClient {
     const result = await ipfsJson<{ Pins: string[] }>(
       this.baseUrl,
       `/api/v0/pin/rm?${params.toString()}`,
-      { timeout: this.timeout, retryConfig: this.retryConfig },
+      { timeout: this.timeout, retryConfig: this.retryConfig }
     );
     return { cid, pinned: !result.Pins.includes(cid) };
   }
@@ -149,7 +152,7 @@ export class IpfsClient {
     const result = await ipfsJson<{ Keys: Record<string, { Type: string }> }>(
       this.baseUrl,
       `/api/v0/pin/ls?${params.toString()}`,
-      { timeout: this.timeout, retryConfig: this.retryConfig },
+      { timeout: this.timeout, retryConfig: this.retryConfig }
     );
     return Object.entries(result.Keys ?? {}).map(([key, val]) => ({
       cid: key,
@@ -170,11 +173,10 @@ export class IpfsClient {
   }
 
   async id(): Promise<{ id: string; addresses: string[] }> {
-    const result = await ipfsJson<{ ID: string; Addresses: string[] }>(
-      this.baseUrl,
-      '/api/v0/id',
-      { timeout: this.timeout, retryConfig: this.retryConfig },
-    );
+    const result = await ipfsJson<{ ID: string; Addresses: string[] }>(this.baseUrl, '/api/v0/id', {
+      timeout: this.timeout,
+      retryConfig: this.retryConfig,
+    });
     return { id: result.ID, addresses: result.Addresses };
   }
 

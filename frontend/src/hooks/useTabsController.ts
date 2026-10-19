@@ -1,5 +1,7 @@
-import { useRef, useState, useEffect, KeyboardEvent } from 'react';
+import { useRef, useState, useEffect } from 'react';
+
 import type { Tab } from '../components/Tabs';
+import type { KeyboardEvent } from 'react';
 
 export interface UseTabsControllerOptions {
   tabs: Tab[];
@@ -17,9 +19,7 @@ export function useTabsController({
   orientation = 'horizontal',
 }: UseTabsControllerOptions) {
   const isControlled = controlledActiveTab !== undefined;
-  const [internalActiveTab, setInternalActiveTab] = useState(
-    defaultTab || tabs[0]?.id || ''
-  );
+  const [internalActiveTab, setInternalActiveTab] = useState(defaultTab || tabs[0]?.id || '');
   const activeTab = isControlled ? controlledActiveTab : internalActiveTab;
   const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 

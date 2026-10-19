@@ -42,8 +42,8 @@ class TieredCache {
     return undefined;
   }
 
-  set<T>(key: string, value: T, ttlMs: number, tier: "l1" | "l2" = "l1"): void {
-    const store = tier === "l1" ? this.l1 : this.l2;
+  set<T>(key: string, value: T, ttlMs: number, tier: 'l1' | 'l2' = 'l1'): void {
+    const store = tier === 'l1' ? this.l1 : this.l2;
     store.set(key, { value, expiresAt: Date.now() + ttlMs });
   }
 
@@ -123,7 +123,7 @@ export async function getCachedContractData(contractId: string, dataKey: string,
   const cached = cache.get(cacheKey);
   if (cached !== undefined) return cached;
   const value = await fetchFn();
-  cache.set(cacheKey, value, CACHE_TTL.contractData, "l2");
+  cache.set(cacheKey, value, CACHE_TTL.contractData, 'l2');
   _stats = cache.getStats();
   return value;
 }

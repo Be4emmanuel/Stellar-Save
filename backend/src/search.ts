@@ -1,18 +1,38 @@
 import { Client } from '@elastic/elasticsearch';
-import { Group, Member, Transaction } from './models';
+
 import { config } from './config';
 import { logger } from './logger';
+
+import type { Group, Member, Transaction } from './models';
+
+/**
+ * Search service backed by Elasticsearch.
+ *
+ * Refactored for dependency injection (Issue #1701):
+ * - Elasticsearch Client, config, and logger are injected via constructor
+ * - Tests can pass a lightweight mock client instead of hitting a real ES cluster
+ */
+
+export interface SearchServiceDeps {
+  client?: Client;
+  config?: { elasticsearch: { node: string; username: string; password: string } };
+  logger?: { info: (...a: unknown[]) => void; error: (...a: unknown[]) => void; debug: (...a: unknown[]) => void };
+}
 
 export class SearchService {
   private client: Client;
   private isConnected: boolean = false;
+  private readonly log: NonNullable<SearchServiceDeps['logger']>;
 
-  constructor() {
-    this.client = new Client({
-      node: config.elasticsearch.node,
+  constructor(deps?: SearchServiceDeps) {
+    const resolvedConfig = deps?.config ?? config;
+    this.log = deps?.logger ?? logger;
+
+    this.client = deps?.client ?? new Client({
+      node: resolvedConfig.elasticsearch.node,
       auth: {
-        username: config.elasticsearch.username,
-        password: config.elasticsearch.password,
+        username: resolvedConfig.elasticsearch.username,
+        password: resolvedConfig.elasticsearch.password,
       },
     });
   }
@@ -21,10 +41,10 @@ export class SearchService {
     try {
       await this.client.ping();
       this.isConnected = true;
-      logger.info('Connected to Elasticsearch');
+      this.log.info('Connected to Elasticsearch');
       await this.createIndices();
     } catch (error) {
-      logger.error('Elasticsearch connection failed:', error);
+      this.log.error('Elasticsearch connection failed:', error);
       this.isConnected = false;
     }
   }
@@ -137,7 +157,7 @@ export class SearchService {
 
   async globalSearch(query: string) {
     if (!this.isConnected) return { groups: [], members: [], transactions: [] };
-
+    
     const [groups, members, transactions] = await Promise.all([
       this.searchGroups(query),
       this.searchMembers(query),

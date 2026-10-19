@@ -9,11 +9,13 @@
  * that was never part of groupApi.ts, so it never actually exercised the
  * page).
  */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
 import GroupDetailPage from '../pages/GroupDetailPage';
 import * as groupApi from '../utils/groupApi';
+
 import type { DetailedGroup } from '../utils/groupApi';
 
 // ── Mock dependencies ─────────────────────────────────────────────────────────
@@ -25,7 +27,9 @@ vi.mock('../ui', () => ({
       {children}
     </div>
   ),
-  AppCard: ({ children }: { children: React.ReactNode }) => <div data-testid="app-card">{children}</div>,
+  AppCard: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="app-card">{children}</div>
+  ),
 }));
 
 vi.mock('../hooks/useWallet', () => ({
@@ -72,18 +76,65 @@ const mockGroupDetail: DetailedGroup = {
   currentAmount: 300,
   contributionFrequency: 'monthly',
   members: [
-    { id: '1', address: 'GMEMBER1', joinedAt: new Date('2024-01-15'), totalContributions: 300, isActive: true },
-    { id: '2', address: 'GMEMBER2', joinedAt: new Date('2024-01-16'), totalContributions: 300, isActive: true },
-    { id: '3', address: 'GABC123XYZ', joinedAt: new Date('2024-01-18'), totalContributions: 200, isActive: true },
+    {
+      id: '1',
+      address: 'GMEMBER1',
+      joinedAt: new Date('2024-01-15'),
+      totalContributions: 300,
+      isActive: true,
+    },
+    {
+      id: '2',
+      address: 'GMEMBER2',
+      joinedAt: new Date('2024-01-16'),
+      totalContributions: 300,
+      isActive: true,
+    },
+    {
+      id: '3',
+      address: 'GABC123XYZ',
+      joinedAt: new Date('2024-01-18'),
+      totalContributions: 200,
+      isActive: true,
+    },
   ],
   contributions: [
-    { id: 'c1', memberId: '1', memberName: 'GMEMBER1', amount: 100, timestamp: new Date('2024-06-01'), transactionHash: 'tx1', status: 'completed' },
+    {
+      id: 'c1',
+      memberId: '1',
+      memberName: 'GMEMBER1',
+      amount: 100,
+      timestamp: new Date('2024-06-01'),
+      transactionHash: 'tx1',
+      status: 'completed',
+    },
   ],
   cycles: [
-    { cycleNumber: 1, startDate: new Date('2024-01-01'), endDate: new Date('2024-01-31'), targetAmount: 500, currentAmount: 500, status: 'completed' },
-    { cycleNumber: 2, startDate: new Date('2024-02-01'), endDate: new Date('2024-02-28'), targetAmount: 500, currentAmount: 300, status: 'active' },
+    {
+      cycleNumber: 1,
+      startDate: new Date('2024-01-01'),
+      endDate: new Date('2024-01-31'),
+      targetAmount: 500,
+      currentAmount: 500,
+      status: 'completed',
+    },
+    {
+      cycleNumber: 2,
+      startDate: new Date('2024-02-01'),
+      endDate: new Date('2024-02-28'),
+      targetAmount: 500,
+      currentAmount: 300,
+      status: 'active',
+    },
   ],
-  currentCycle: { cycleNumber: 2, startDate: new Date('2024-02-01'), endDate: new Date('2024-02-28'), targetAmount: 500, currentAmount: 300, status: 'active' },
+  currentCycle: {
+    cycleNumber: 2,
+    startDate: new Date('2024-02-01'),
+    endDate: new Date('2024-02-28'),
+    targetAmount: 500,
+    currentAmount: 300,
+    status: 'active',
+  },
 };
 
 function renderPage() {

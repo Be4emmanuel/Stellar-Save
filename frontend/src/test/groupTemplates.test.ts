@@ -14,10 +14,7 @@
  * Target: ≥ 90 % line coverage on template-related modules.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  GROUP_TEMPLATES,
-  type GroupTemplate,
-} from '../types/template';
+
 import {
   saveTemplate,
   loadTemplates,
@@ -26,10 +23,9 @@ import {
   decodeShareCode,
   createStep,
 } from '../services/transactionBuilderService';
-import type {
-  TransactionTemplate,
-  TransactionBuilderStep,
-} from '../types/transactionBuilder';
+import { GROUP_TEMPLATES, type GroupTemplate } from '../types/template';
+
+import type { TransactionTemplate, TransactionBuilderStep } from '../types/transactionBuilder';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -152,14 +148,14 @@ describe('Override precedence when applying a template', () => {
    */
   function applyTemplate(
     template: GroupTemplate,
-    overrides: { contributionAmount: number; groupId: number },
+    overrides: { contributionAmount: number; groupId: number }
   ) {
     return {
       groupId: overrides.groupId,
       contributionAmount: overrides.contributionAmount,
-      cycleDuration: template.cycleDuration,   // from template
-      maxMembers: template.maxMembers,          // from template
-      category: template.category,             // from template
+      cycleDuration: template.cycleDuration, // from template
+      maxMembers: template.maxMembers, // from template
+      category: template.category, // from template
     };
   }
 

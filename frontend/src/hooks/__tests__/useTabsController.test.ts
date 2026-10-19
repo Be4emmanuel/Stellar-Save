@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+
 import { useTabsController } from '../useTabsController';
+
 import type { Tab } from '../../components/Tabs';
 
 const mockTabs: Tab[] = [
@@ -16,9 +18,7 @@ describe('useTabsController', () => {
   });
 
   it('respects defaultTab', () => {
-    const { result } = renderHook(() =>
-      useTabsController({ tabs: mockTabs, defaultTab: 'tab2' })
-    );
+    const { result } = renderHook(() => useTabsController({ tabs: mockTabs, defaultTab: 'tab2' }));
     expect(result.current.activeTab).toBe('tab2');
   });
 

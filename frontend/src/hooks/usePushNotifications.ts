@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { useWallet } from './useWallet';
 import {
   requestNotificationPermission,
@@ -24,6 +25,7 @@ import {
   isNotificationsEnabled,
   setNotificationsEnabled,
 } from '../notifications';
+
 import type { ContributionReminder, NotificationPermissionStatus } from '../notifications';
 
 export interface UsePushNotificationsReturn {
@@ -42,9 +44,8 @@ export interface UsePushNotificationsReturn {
 export function usePushNotifications(): UsePushNotificationsReturn {
   const { status, activeAddress } = useWallet();
 
-  const [permission, setPermission] = useState<NotificationPermissionStatus>(
-    getNotificationPermission,
-  );
+  const [permission, setPermission] =
+    useState<NotificationPermissionStatus>(getNotificationPermission);
   const [enabled, setEnabled] = useState<boolean>(isNotificationsEnabled);
 
   // Track the previous wallet status so we only trigger on the transition
@@ -58,8 +59,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
 
   // ── Step 2: Request permission when wallet connects ─────────────────────
   useEffect(() => {
-    const justConnected =
-      prevStatusRef.current !== 'connected' && status === 'connected';
+    const justConnected = prevStatusRef.current !== 'connected' && status === 'connected';
 
     prevStatusRef.current = status;
 
@@ -94,7 +94,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       if (!enabled) return;
       scheduleContributionReminders(reminder);
     },
-    [enabled],
+    [enabled]
   );
 
   const cancelReminder = useCallback((groupId: string) => {

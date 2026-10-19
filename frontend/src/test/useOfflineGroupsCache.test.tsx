@@ -1,9 +1,11 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useOfflineGroupsCache } from '../hooks/useOfflineGroupsCache';
-import * as groupApi from '../utils/groupApi';
 import * as db from '../lib/db';
 import { DEFAULT_GROUP_FILTERS } from '../types/group';
+import * as groupApi from '../utils/groupApi';
+
 import type { PublicGroup } from '../types/group';
 
 // jsdom has no IndexedDB, so the cache layer is stubbed rather than exercised.
@@ -143,9 +145,9 @@ describe('useOfflineGroupsCache', () => {
     });
     const { result } = renderHook(() => useOfflineGroupsCache());
 
-    await expect(
-      result.current.fetchGroupsWithFallback(DEFAULT_GROUP_FILTERS),
-    ).rejects.toThrow(/no data available offline/i);
+    await expect(result.current.fetchGroupsWithFallback(DEFAULT_GROUP_FILTERS)).rejects.toThrow(
+      /no data available offline/i
+    );
   });
 
   it('clears the cache flags once a later online fetch succeeds', async () => {

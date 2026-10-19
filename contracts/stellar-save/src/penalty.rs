@@ -12,7 +12,10 @@
 
 use soroban_sdk::{contracttype, Address, Env};
 
-use crate::{auth::is_active_member, error::StellarSaveError, events::EventEmitter, storage::StorageKeyBuilder};
+use crate::{
+    auth::is_active_member, error::StellarSaveError, events::EventEmitter,
+    storage::StorageKeyBuilder,
+};
 
 // ─── Type Aliases ─────────────────────────────────────────────────────────────
 
@@ -125,7 +128,13 @@ pub fn calculate_penalty(
     let capped_bps = raw_bps.min(config.max_penalty_bps);
 
     // penalty = contribution_amount * capped_bps / 10_000
-    (contribution_amount * capped_bps as i128) / 10_000
+    // Split into quotient/remainder so the multiplication cannot overflow i128
+    // for large contribution amounts (issue #1718). Result is identical to the
+    // naive formula whenever that formula does not overflow.
+    let bps = capped_bps as i128;
+    let whole = (contribution_amount / 10_000).saturating_mul(bps);
+    let part = (contribution_amount % 10_000) * bps / 10_000;
+    whole.saturating_add(part)
 }
 
 /// Applies a penalty to a member for missing a contribution in `cycle_id`.
@@ -256,7 +265,11 @@ pub fn recover_penalty(
 
     // 4. Load config and calculate required recovery amount
     let config = load_penalty_config(env, group_id);
-    let recovery_fee = (group.contribution_amount * config.recovery_fee_bps as i128) / 10_000;
+    let recovery_fee = group
+        .contribution_amount
+        .checked_mul(config.recovery_fee_bps as i128)
+        .ok_or(StellarSaveError::Overflow)?
+        / 10_000;
     let required = group
         .contribution_amount
         .checked_add(recovery_fee)
@@ -451,5 +464,44 @@ mod tests {
         assert_eq!(cfg.penalty_increment_bps, 500);
         assert_eq!(cfg.max_penalty_bps, 2500);
         assert_eq!(cfg.recovery_fee_bps, 1000);
+    }
+
+    // ── Overflow boundary regression tests (issue #1718) ─────────────────────
+
+    #[test]
+    fn test_calculate_penalty_i128_max_does_not_overflow() {
+        let cfg = default_config();
+        // Naive `amount * 2500` would overflow i128; split formula must not.
+        let penalty = calculate_penalty(i128::MAX, 10, &cfg);
+        assert_eq!(
+            penalty,
+            (i128::MAX / 10_000) * 2500 + (i128::MAX % 10_000) * 2500 / 10_000
+        );
+        assert!(penalty > 0 && penalty < i128::MAX);
+    }
+
+    #[test]
+    fn test_calculate_penalty_max_bps_saturates() {
+        let cfg = PenaltyConfig {
+            base_penalty_bps: u32::MAX,
+            penalty_increment_bps: u32::MAX,
+            max_penalty_bps: u32::MAX,
+            recovery_fee_bps: 0,
+        };
+        assert_eq!(calculate_penalty(i128::MAX, u32::MAX, &cfg), i128::MAX);
+    }
+
+    #[test]
+    fn test_calculate_penalty_matches_naive_formula_below_overflow() {
+        let cfg = default_config();
+        for amount in [1i128, 9_999, 10_000, 10_001, 123_456_789, 1_000_000_000_000] {
+            for missed in 1..=6u32 {
+                let bps = (500 + 500 * (missed - 1)).min(2500) as i128;
+                assert_eq!(
+                    calculate_penalty(amount, missed, &cfg),
+                    amount * bps / 10_000
+                );
+            }
+        }
     }
 }

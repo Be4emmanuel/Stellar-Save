@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Box,
   Stack,
@@ -13,9 +12,14 @@ import {
   Divider,
   Chip,
 } from '@mui/material';
+import { useState } from 'react';
+
 import { Button } from './Button';
 import { ContributionSuccessModal } from './ContributionSuccessModal';
+import { translateValidationMessage, validateContributionAmount } from '../schemas/contributionSchema';
 import { getExplorerTxUrl } from '../utils/explorerUrl';
+
+import type { ValidationMessage } from '../schemas/contributionSchema';
 import type { TransactionStatus } from '../types/contribution';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -42,15 +46,8 @@ export interface ContributionFlowProps {
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
-
-function validateAmount(raw: string, min: number, max: number): string | null {
-  const value = parseFloat(raw);
-  if (!raw.trim() || isNaN(value)) return 'Please enter a valid amount.';
-  if (value <= 0) return 'Amount must be greater than 0.';
-  if (value < min) return `Minimum contribution is ${min} XLM.`;
-  if (value > max) return `Maximum contribution is ${max} XLM.`;
-  return null;
-}
+// Rules live in `schemas/contributionSchema` so ContributionFlow and
+// ContributionScheduler validate amounts identically.
 
 // ── Mock wallet transaction ──────────────────────────────────────────────────
 
@@ -75,7 +72,9 @@ const STATUS_LABEL: Record<TransactionStatus, string> = {
   error: 'Transaction failed.',
 };
 
-const STATUS_SEVERITY: Partial<Record<TransactionStatus, 'info' | 'success' | 'error' | 'warning'>> = {
+const STATUS_SEVERITY: Partial<
+  Record<TransactionStatus, 'info' | 'success' | 'error' | 'warning'>
+> = {
   confirming: 'info',
   pending: 'info',
   submitting: 'info',
@@ -94,14 +93,23 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-function ConfirmDialog({ open, amount, cycleId, groupName, onConfirm, onCancel }: ConfirmDialogProps) {
+function ConfirmDialog({
+  open,
+  amount,
+  cycleId,
+  groupName,
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
       <DialogTitle>Confirm Contribution</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           {groupName && (
-            <Typography variant="subtitle2" fontWeight={600}>{groupName}</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>
+              {groupName}
+            </Typography>
           )}
           <Typography variant="body2" color="text.secondary">
             Cycle #{cycleId}
@@ -109,17 +117,29 @@ function ConfirmDialog({ open, amount, cycleId, groupName, onConfirm, onCancel }
           <Box sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 2 }}>
             <Stack spacing={1}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">Amount</Typography>
-                <Typography variant="body2" fontWeight={700}>{amount} XLM</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Amount
+                </Typography>
+                <Typography variant="body2" fontWeight={700}>
+                  {amount} XLM
+                </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">Network fee</Typography>
-                <Typography variant="body2" color="text.secondary">~0.00001 XLM</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Network fee
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  ~0.00001 XLM
+                </Typography>
               </Box>
               <Divider />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" fontWeight={600}>Total</Typography>
-                <Typography variant="body2" fontWeight={700} color="primary">{amount} XLM</Typography>
+                <Typography variant="body2" fontWeight={600}>
+                  Total
+                </Typography>
+                <Typography variant="body2" fontWeight={700} color="primary">
+                  {amount} XLM
+                </Typography>
               </Box>
             </Stack>
           </Box>
@@ -129,8 +149,12 @@ function ConfirmDialog({ open, amount, cycleId, groupName, onConfirm, onCancel }
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-        <Button variant="primary" onClick={onConfirm}>Confirm &amp; Sign</Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={onConfirm}>
+          Confirm &amp; Sign
+        </Button>
       </DialogActions>
     </Dialog>
   );
@@ -160,11 +184,11 @@ export function ContributionFlow({
   disabled = false,
 }: ContributionFlowProps) {
   const [amountInput, setAmountInput] = useState(defaultAmount ? String(defaultAmount) : '');
-  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<ValidationMessage | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [status, setStatus] = useState<TransactionStatus>('idle');
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [, setErrorMessage] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
   const isProcessing = ['confirming', 'pending', 'submitting'].includes(status);
@@ -172,8 +196,11 @@ export function ContributionFlow({
 
   const handleSubmitForm = (e: React.FormEvent) => {
     e.preventDefault();
-    const err = validateAmount(amountInput, minAmount, maxAmount);
-    if (err) { setFieldError(err); return; }
+    const err = validateContributionAmount(amountInput, { min: minAmount, max: maxAmount });
+    if (err) {
+      setFieldError(err);
+      return;
+    }
     setFieldError(null);
     setConfirmOpen(true);
   };
@@ -233,9 +260,13 @@ export function ContributionFlow({
           sx={{ mb: 2 }}
           action={
             status === 'error' ? (
-              <Button variant="ghost" size="sm" onClick={handleRetry}>Retry</Button>
+              <Button variant="ghost" size="sm" onClick={handleRetry}>
+                Retry
+              </Button>
             ) : status === 'success' ? (
-              <Button variant="ghost" size="sm" onClick={handleReset}>New</Button>
+              <Button variant="ghost" size="sm" onClick={handleReset}>
+                New
+              </Button>
             ) : undefined
           }
         >
@@ -263,9 +294,16 @@ export function ContributionFlow({
               label="Contribution Amount (XLM)"
               type="number"
               value={amountInput}
-              onChange={(e) => { setAmountInput(e.target.value); setFieldError(null); }}
+              onChange={(e) => {
+                setAmountInput(e.target.value);
+                setFieldError(null);
+              }}
               error={!!fieldError}
-              helperText={fieldError ?? `Min: ${minAmount} XLM · Max: ${maxAmount.toLocaleString()} XLM`}
+              helperText={
+                fieldError
+                  ? translateValidationMessage(fieldError)
+                  : `Min: ${minAmount} XLM · Max: ${maxAmount.toLocaleString()} XLM`
+              }
               inputProps={{ min: minAmount, max: maxAmount, step: '0.01' }}
               disabled={isProcessing || !walletAddress || disabled}
               fullWidth
@@ -282,7 +320,10 @@ export function ContributionFlow({
                     size="small"
                     variant={parseFloat(amountInput) === v ? 'filled' : 'outlined'}
                     color={parseFloat(amountInput) === v ? 'primary' : 'default'}
-                    onClick={() => { setAmountInput(String(v)); setFieldError(null); }}
+                    onClick={() => {
+                      setAmountInput(String(v));
+                      setFieldError(null);
+                    }}
                     disabled={isProcessing || !walletAddress || disabled}
                     sx={{ cursor: 'pointer' }}
                   />
@@ -301,10 +342,14 @@ export function ContributionFlow({
                     <CircularProgress size={16} color="inherit" />
                     Processing...
                   </Box>
-                ) : 'Contribute'}
+                ) : (
+                  'Contribute'
+                )}
               </Button>
               {status === 'error' && (
-                <Button variant="secondary" onClick={handleRetry}>Try Again</Button>
+                <Button variant="secondary" onClick={handleRetry}>
+                  Try Again
+                </Button>
               )}
             </Box>
           </Stack>
@@ -314,11 +359,15 @@ export function ContributionFlow({
       {/* Success state */}
       {status === 'success' && (
         <Stack spacing={2} alignItems="center" sx={{ py: 2 }}>
-          <Typography variant="h6" color="success.main">🎉 Contribution Successful!</Typography>
+          <Typography variant="h6" color="success.main">
+            🎉 Contribution Successful!
+          </Typography>
           <Typography variant="body2" color="text.secondary">
             {parsedAmount} XLM contributed to Cycle #{cycleId}
           </Typography>
-          <Button variant="secondary" onClick={handleReset}>Make Another Contribution</Button>
+          <Button variant="secondary" onClick={handleReset}>
+            Make Another Contribution
+          </Button>
         </Stack>
       )}
 

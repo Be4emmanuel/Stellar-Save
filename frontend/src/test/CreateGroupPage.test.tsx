@@ -1,12 +1,13 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import CreateGroupPage from '../pages/CreateGroupPage';
-import { routeConfig } from '../routing/routes';
-import { ROUTES } from '../routing/constants';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { queryKeys } from '../lib/queryKeys';
+import CreateGroupPage from '../pages/CreateGroupPage';
+import { ROUTES } from '../routing/constants';
+import { routeConfig } from '../routing/routes';
 
 // Mock wallet so the form doesn't block on "connect wallet"
 vi.mock('../hooks/useWallet', () => ({
@@ -16,7 +17,9 @@ vi.mock('../hooks/useWallet', () => ({
 // Mock insurance API to avoid real HTTP requests
 vi.mock('../utils/insuranceApi', () => ({
   updateInsuranceSettings: vi.fn().mockResolvedValue({}),
-  fetchInsurancePool: vi.fn().mockResolvedValue({ enabled: false, balance: 0, premiumRate: 0.05, claims: [] }),
+  fetchInsurancePool: vi
+    .fn()
+    .mockResolvedValue({ enabled: false, balance: 0, premiumRate: 0.05, claims: [] }),
   fileClaim: vi.fn(),
 }));
 
@@ -25,7 +28,9 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => vi.fn() };
 });
 
-function renderPage(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderPage(
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+) {
   return {
     queryClient,
     ...render(
@@ -33,7 +38,7 @@ function renderPage(queryClient = new QueryClient({ defaultOptions: { queries: {
         <MemoryRouter>
           <CreateGroupPage />
         </MemoryRouter>
-      </QueryClientProvider>,
+      </QueryClientProvider>
     ),
   };
 }

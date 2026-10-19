@@ -1,16 +1,25 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi } from 'vitest';
+
 import { TemplateCard } from '../components/templates/TemplateCard';
+import TemplateGalleryPage from '../pages/TemplateGalleryPage';
 import { GROUP_TEMPLATES } from '../types/template';
+
 import type { GroupTemplate } from '../types/template';
 
 const template: GroupTemplate = GROUP_TEMPLATES[0]; // Weekly Saver
 
-function renderCard(overrides?: Partial<{ onUse: (t: GroupTemplate) => void; onPreview: (t: GroupTemplate) => void }>) {
+function renderCard(
+  overrides?: Partial<{ onUse: (t: GroupTemplate) => void; onPreview: (t: GroupTemplate) => void }>
+) {
   const onUse = overrides?.onUse ?? vi.fn();
   const onPreview = overrides?.onPreview ?? vi.fn();
-  return { onUse, onPreview, ...render(<TemplateCard template={template} onUse={onUse} onPreview={onPreview} />) };
+  return {
+    onUse,
+    onPreview,
+    ...render(<TemplateCard template={template} onUse={onUse} onPreview={onPreview} />),
+  };
 }
 
 describe('TemplateCard', () => {
@@ -69,7 +78,6 @@ describe('GROUP_TEMPLATES', () => {
 });
 
 // ─── TemplateGalleryPage smoke test ──────────────────────────────────────────
-import TemplateGalleryPage from '../pages/TemplateGalleryPage';
 
 // Minimal AppLayout mock
 vi.mock('../ui', () => ({

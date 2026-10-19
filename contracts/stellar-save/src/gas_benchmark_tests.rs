@@ -643,4 +643,68 @@ mod regression {
             "list_members page cost ({page_cost}) > get_members full cost ({full_cost})"
         );
     }
+
+    /// contribute must stay under 4.5M CPU instructions.
+    #[test]
+    fn regression_contribute_ceiling() {
+        let b = setup();
+        let creator = Address::generate(&b.env);
+        let group_id = 1u64;
+        inject_group(&b.env, group_id, &creator, 5, &b.token_address);
+        let members = populate_members(&b, group_id, 5);
+        activate_group(&b.env, group_id);
+
+        let member = members.get(0).unwrap();
+        mint_tokens(&b, &member, 10_000_000);
+
+        let client = StellarSaveContractClient::new(&b.env, &b.contract_id);
+        b.env.budget().reset_unlimited();
+        client.contribute(&group_id, &member, &10_000_000i128);
+        let cpu = b.env.budget().get_budget_info().cpu_insns;
+        assert!(cpu < 4_500_000, "contribute regressed: {cpu} insns");
+    }
+
+    /// tick (cycle advancement) must stay under 3.5M CPU instructions.
+    #[test]
+    fn regression_cycle_advancement_ceiling() {
+        let b = setup();
+        let creator = Address::generate(&b.env);
+        let group_id = 1u64;
+        inject_group(&b.env, group_id, &creator, 5, &b.token_address);
+        let _members = populate_members(&b, group_id, 5);
+        activate_group(&b.env, group_id);
+
+        // Advance ledger time past cycle deadline (started_at + cycle_duration + 10)
+        b.env.ledger().set_timestamp(b.env.ledger().timestamp() + 604_800 + 10);
+
+        let client = StellarSaveContractClient::new(&b.env, &b.contract_id);
+        b.env.budget().reset_unlimited();
+        client.tick(&group_id);
+        let cpu = b.env.budget().get_budget_info().cpu_insns;
+        assert!(cpu < 3_500_000, "tick cycle advancement regressed: {cpu} insns");
+    }
+
+    /// contribute_batch must stay under 6.0M CPU instructions for 2 cycles.
+    #[test]
+    fn regression_batch_contribute_ceiling() {
+        let b = setup();
+        let creator = Address::generate(&b.env);
+        let group_id = 1u64;
+        inject_group(&b.env, group_id, &creator, 5, &b.token_address);
+        let members = populate_members(&b, group_id, 5);
+        activate_group(&b.env, group_id);
+
+        let member = members.get(0).unwrap();
+        mint_tokens(&b, &member, 20_000_000);
+
+        let mut cycles = soroban_sdk::Vec::new(&b.env);
+        cycles.push_back(0);
+        cycles.push_back(1);
+
+        let client = StellarSaveContractClient::new(&b.env, &b.contract_id);
+        b.env.budget().reset_unlimited();
+        client.contribute_batch(&group_id, &member, &cycles);
+        let cpu = b.env.budget().get_budget_info().cpu_insns;
+        assert!(cpu < 6_000_000, "contribute_batch regressed: {cpu} insns");
+    }
 }

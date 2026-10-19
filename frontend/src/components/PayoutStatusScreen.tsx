@@ -1,12 +1,8 @@
-import {
-  Box,
-  Stack,
-  Typography,
-  Chip,
-  Divider,
-  LinearProgress,
-} from '@mui/material';
+import { Box, Stack, Typography, Chip, Divider, LinearProgress } from '@mui/material';
+
+import { formatShortDate as formatDate } from '../lib/formatters';
 import { getExplorerTxUrl } from '../utils/explorerUrl';
+
 import type { PayoutEntry, PayoutQueueData } from '../types/contribution';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,10 +17,6 @@ export interface PayoutStatusScreenProps {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 function pluralise(n: number, singular: string, plural = `${singular}s`): string {
   return `${n} ${n === 1 ? singular : plural}`;
@@ -45,9 +37,7 @@ function UserPositionCard({
 }) {
   const cyclesAway = entry.position - cyclesCompleted - 1;
   const daysAway =
-    cycleDurationDays !== undefined && cyclesAway > 0
-      ? cyclesAway * cycleDurationDays
-      : undefined;
+    cycleDurationDays !== undefined && cyclesAway > 0 ? cyclesAway * cycleDurationDays : undefined;
 
   const statusColor: Record<PayoutEntry['status'], 'success' | 'warning' | 'default'> = {
     completed: 'success',
@@ -71,7 +61,13 @@ function UserPositionCard({
             Your Payout Position
           </Typography>
           <Chip
-            label={entry.status === 'next' ? 'Up Next!' : entry.status === 'completed' ? 'Paid' : 'Upcoming'}
+            label={
+              entry.status === 'next'
+                ? 'Up Next!'
+                : entry.status === 'completed'
+                  ? 'Paid'
+                  : 'Upcoming'
+            }
             color={statusColor[entry.status]}
             size="small"
           />
@@ -92,7 +88,9 @@ function UserPositionCard({
           <Row label="Payout amount" value={`${entry.amount} XLM`} bold />
           <Row
             label={entry.status === 'completed' ? 'Received on' : 'Estimated date'}
-            value={formatDate(entry.status === 'completed' && entry.paidAt ? entry.paidAt : entry.estimatedDate)}
+            value={formatDate(
+              entry.status === 'completed' && entry.paidAt ? entry.paidAt : entry.estimatedDate
+            )}
           />
           {daysAway !== undefined && entry.status === 'upcoming' && (
             <Row label="Est. wait" value={`~${pluralise(daysAway, 'day')}`} />
@@ -106,7 +104,11 @@ function UserPositionCard({
                 href={getExplorerTxUrl(entry.txHash)}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ fontSize: '0.8rem', color: 'var(--color-primary)', textDecoration: 'none' }}
+                style={{
+                  fontSize: '0.8rem',
+                  color: 'var(--color-primary)',
+                  textDecoration: 'none',
+                }}
               >
                 View payout transaction →
               </a>
@@ -121,8 +123,12 @@ function UserPositionCard({
 function Row({ label, value, bold = false }: { label: string; value: string; bold?: boolean }) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary">{label}</Typography>
-      <Typography variant="body2" fontWeight={bold ? 700 : 400} textAlign="right">{value}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="body2" fontWeight={bold ? 700 : 400} textAlign="right">
+        {value}
+      </Typography>
     </Box>
   );
 }
@@ -137,7 +143,9 @@ function QueueProgress({ completed, total }: { completed: number; total: number 
         <Typography variant="caption" color="text.secondary">
           {completed} of {total} paid out
         </Typography>
-        <Typography variant="caption" fontWeight={600}>{pct}%</Typography>
+        <Typography variant="caption" fontWeight={600}>
+          {pct}%
+        </Typography>
       </Box>
       <LinearProgress variant="determinate" value={pct} sx={{ borderRadius: 4, height: 6 }} />
     </Stack>
@@ -156,9 +164,7 @@ export function PayoutStatusScreen({
   currentUserAddress,
 }: PayoutStatusScreenProps) {
   const address = currentUserAddress ?? data.currentUserAddress;
-  const userEntry = address
-    ? data.entries.find((e) => e.memberAddress === address)
-    : undefined;
+  const userEntry = address ? data.entries.find((e) => e.memberAddress === address) : undefined;
 
   const completed = data.entries.filter((e) => e.status === 'completed');
   const nextEntry = data.entries.find((e) => e.status === 'next');
@@ -188,9 +194,7 @@ export function PayoutStatusScreen({
           cyclesCompleted={completed.length}
         />
       ) : (
-        <Box
-          sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 2, textAlign: 'center' }}
-        >
+        <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 2, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
             Connect your wallet to see your payout position.
           </Typography>
@@ -199,12 +203,32 @@ export function PayoutStatusScreen({
 
       {/* Next payout highlight */}
       {nextEntry && nextEntry.memberAddress !== address && (
-        <Box sx={{ borderRadius: 2, bgcolor: 'warning.50', border: '1px solid', borderColor: 'warning.200', p: 2 }}>
-          <Typography variant="caption" fontWeight={700} color="warning.dark" textTransform="uppercase" letterSpacing={0.5}>
+        <Box
+          sx={{
+            borderRadius: 2,
+            bgcolor: 'warning.50',
+            border: '1px solid',
+            borderColor: 'warning.200',
+            p: 2,
+          }}
+        >
+          <Typography
+            variant="caption"
+            fontWeight={700}
+            color="warning.dark"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+          >
             Next Payout
           </Typography>
           <Stack spacing={0.5} sx={{ mt: 1 }}>
-            <Row label="Recipient" value={nextEntry.memberName ?? `${nextEntry.memberAddress.slice(0, 6)}…${nextEntry.memberAddress.slice(-4)}`} />
+            <Row
+              label="Recipient"
+              value={
+                nextEntry.memberName ??
+                `${nextEntry.memberAddress.slice(0, 6)}…${nextEntry.memberAddress.slice(-4)}`
+              }
+            />
             <Row label="Amount" value={`${nextEntry.amount} XLM`} bold />
             <Row label="Estimated date" value={formatDate(nextEntry.estimatedDate)} />
           </Stack>

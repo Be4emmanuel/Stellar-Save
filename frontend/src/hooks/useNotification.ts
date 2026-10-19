@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
+
 import { useToast } from '../components/Toast/useToast';
+
 import type { Toast, ToastAction, ToastType } from '../components/Toast/types';
 import { NotificationUI } from '../notifications/NotificationUI';
 import type { NotificationMessage, UIRenderOptions } from '../notifications/types';
@@ -34,43 +36,50 @@ export function useNotification(): UseNotificationReturn {
   const { addToast, removeToast, toasts, queue } = useToast();
 
   const notify = useCallback(
-    ({ type = 'info', ...options }: NotifyOptions) => addToast({
-      ...options,
-      type,
-    }),
-    [addToast],
+    ({ type = 'info', ...options }: NotifyOptions) =>
+      addToast({
+        ...options,
+        type,
+      }),
+    [addToast]
   );
 
   const success = useCallback(
-    (message: string, options?: NotificationOptions) => notify({
-      message,
-      type: 'success',
-      ...options,
-    }),
-    [notify],
+    (message: string, options?: NotificationOptions) =>
+      notify({
+        message,
+        type: 'success',
+        ...options,
+      }),
+    [notify]
   );
 
   const error = useCallback(
-    (message: string, options?: NotificationOptions) => notify({
-      message,
-      type: 'error',
-      ...options,
-    }),
-    [notify],
+    (message: string, options?: NotificationOptions) =>
+      notify({
+        message,
+        type: 'error',
+        ...options,
+      }),
+    [notify]
   );
 
   const info = useCallback(
-    (message: string, options?: NotificationOptions) => notify({
-      message,
-      type: 'info',
-      ...options,
-    }),
-    [notify],
+    (message: string, options?: NotificationOptions) =>
+      notify({
+        message,
+        type: 'info',
+        ...options,
+      }),
+    [notify]
   );
 
-  const dismiss = useCallback((id: string) => {
-    removeToast(id);
-  }, [removeToast]);
+  const dismiss = useCallback(
+    (id: string) => {
+      removeToast(id);
+    },
+    [removeToast]
+  );
 
   const showNotification = useCallback(
     (notification: NotificationMessage, uiOptions?: UIRenderOptions) => {
@@ -83,7 +92,7 @@ export function useNotification(): UseNotificationReturn {
         onClose: toast.onClose,
       });
     },
-    [addToast],
+    [addToast]
   );
 
   return {

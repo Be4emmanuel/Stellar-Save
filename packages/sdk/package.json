@@ -15,14 +15,15 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "check:abi": "vitest run src/abi-drift.test.ts"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": ">=14.0.0"
   },
   "devDependencies": {
     "typescript": "~5.9.3",
-    "vitest": "^2.1.8"
+    "vitest": "^3.2.6"
   },
   "license": "MIT"
 }

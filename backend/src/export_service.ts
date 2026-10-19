@@ -1,7 +1,9 @@
-import { ExportJob, ExportFormat, UserInteraction, UserPreference } from './models';
-import { EmailService } from './email_service';
 import { randomUUID } from 'crypto';
+
 import { logger } from './logger';
+
+import type { EmailService } from './email_service';
+import type { ExportJob, ExportFormat, UserInteraction, UserPreference } from './models';
 
 export class ExportService {
   private jobs: Map<string, ExportJob> = new Map();
@@ -54,18 +56,6 @@ export class ExportService {
       // Simulate data fetching and processing delay
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const userData = {
-        preferences: this.preferences.get(job.userId),
-        interactions: this.interactions.filter(i => i.userId === job.userId)
-      };
-
-      let content: string;
-      if (job.format === 'JSON') {
-        content = JSON.stringify(userData, null, 2);
-      } else {
-        content = this.convertToCSV(userData);
-      }
-
       // In a real app, we would upload to S3 or similar
       // For this mock, we'll just use a fake URL
       job.fileUrl = `https://stellar-save.exports/download/${jobId}.${job.format.toLowerCase()}`;
@@ -73,13 +63,13 @@ export class ExportService {
       job.completedAt = Date.now();
 
       await this.emailService.sendExportEmail(email, job.fileUrl);
-    } catch (error: any) {
+    } catch (error: unknown) {
       job.status = 'failed';
-      job.error = error.message;
+      job.error = error instanceof Error ? error.message : String(error);
     }
   }
 
-  private convertToCSV(data: any): string {
+  private convertToCSV(data: { preferences?: { userId: string; tags: string[] }; interactions: UserInteraction[] }): string {
     let csv = 'Type,ID,Value,Timestamp\n';
 
     if (data.preferences) {

@@ -19,6 +19,13 @@ coverage:
           - frontend
         if_not_found: success
         if_ci_failed: error
+      shared-utils:
+        target: 90%
+        threshold: 1%
+        flags:
+          - shared-utils
+        if_not_found: success
+        if_ci_failed: error
       contracts:
         target: 90%
         threshold: 1%
@@ -53,6 +60,11 @@ coverage:
     frontend:
       paths:
         - frontend/src/
+      carryforward: false
+
+    shared-utils:
+      paths:
+        - packages/shared-utils/src/
       carryforward: false
 
     contracts:

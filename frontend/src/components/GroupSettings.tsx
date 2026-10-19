@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import {
   Dialog,
   DialogTitle,
@@ -8,15 +8,21 @@ import {
   Typography,
   CircularProgress,
 } from '@mui/material';
+import { useState } from 'react';
+
 import { Button } from './Button';
-import { useWallet } from '../hooks/useWallet';
 import { useContract } from '../hooks/useContract';
 import { useTransaction, explorerUrl } from '../hooks/useTransaction';
+import { useWallet } from '../hooks/useWallet';
+import { VALIDATION_CONSTANTS } from '../schemas/groupSchema';
+
 import type { GroupDetail } from '../types/group';
 
-const NAME_MIN = 3;
-const NAME_MAX = 50;
-const DESC_MAX = 500;
+// Limits come from the shared schema rather than local copies, so this form and
+// the contract-level validation cannot drift apart.
+const NAME_MIN = VALIDATION_CONSTANTS.GROUP_NAME_MIN;
+const NAME_MAX = VALIDATION_CONSTANTS.GROUP_NAME_MAX;
+const DESC_MAX = VALIDATION_CONSTANTS.GROUP_DESCRIPTION_MAX;
 
 interface GroupSettingsProps {
   group: GroupDetail;
@@ -43,52 +49,51 @@ function computeDiff(original: FormValues, updated: FormValues): Diff[] {
   return diffs;
 }
 
+// See src/components/FORMS.md for the react-hook-form conventions used here.
 export function GroupSettings({ group, onSaved }: GroupSettingsProps) {
   const { activeAddress } = useWallet();
   const { updateGroupMetadata } = useContract();
   const { state, txHash, error, execute, reset } = useTransaction();
 
-  const [values, setValues] = useState<FormValues>({
+  const defaultValues: FormValues = {
     name: group.name,
     description: group.description ?? '',
-  });
-  const [fieldErrors, setFieldErrors] = useState<Partial<FormValues>>({});
+  };
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<FormValues>({ defaultValues, mode: 'onSubmit' });
+
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingDiff, setPendingDiff] = useState<Diff[]>([]);
+  const [pendingValues, setPendingValues] = useState<FormValues | null>(null);
+
+  const nameValue = watch('name');
+  const descriptionValue = watch('description');
 
   // Creator gate
   if (!activeAddress || activeAddress !== group.creator) return null;
 
-  const validate = (): boolean => {
-    const errs: Partial<FormValues> = {};
-    if (!values.name.trim()) errs.name = 'Name is required.';
-    else if (values.name.length < NAME_MIN) errs.name = `Name must be at least ${NAME_MIN} characters.`;
-    else if (values.name.length > NAME_MAX) errs.name = `Name must be at most ${NAME_MAX} characters.`;
-    if (values.description.length > DESC_MAX) errs.description = `Description must be at most ${DESC_MAX} characters.`;
-    setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-    const diff = computeDiff(
-      { name: group.name, description: group.description ?? '' },
-      values,
-    );
+  const onValid = (values: FormValues) => {
+    const diff = computeDiff({ name: group.name, description: group.description ?? '' }, values);
     if (diff.length === 0) return; // nothing changed
     setPendingDiff(diff);
+    setPendingValues(values);
     setConfirmOpen(true);
   };
 
   const handleConfirm = async () => {
+    if (!pendingValues) return;
     setConfirmOpen(false);
     reset();
     await execute(async () => {
       const result = await updateGroupMetadata({
         groupId: BigInt(group.id),
-        name: values.name,
-        description: values.description,
+        name: pendingValues.name,
+        description: pendingValues.description,
       });
       if (result.error) throw new Error(result.error.message);
       return result.txHash!;
@@ -100,15 +105,23 @@ export function GroupSettings({ group, onSaved }: GroupSettingsProps) {
 
   return (
     <div>
-      <Typography variant="h6" gutterBottom>Group Settings</Typography>
+      <Typography variant="h6" gutterBottom>
+        Group Settings
+      </Typography>
 
-      <form onSubmit={handleSubmit} noValidate>
+      <form onSubmit={handleSubmit(onValid)} noValidate>
         <TextField
           label="Group Name"
-          value={values.name}
-          onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-          error={!!fieldErrors.name}
-          helperText={fieldErrors.name ?? `${values.name.length}/${NAME_MAX}`}
+          {...register('name', {
+            validate: (value) => {
+              if (!value.trim()) return 'Name is required.';
+              if (value.length < NAME_MIN) return `Name must be at least ${NAME_MIN} characters.`;
+              if (value.length > NAME_MAX) return `Name must be at most ${NAME_MAX} characters.`;
+              return true;
+            },
+          })}
+          error={!!errors.name}
+          helperText={errors.name?.message ?? `${nameValue.length}/${NAME_MAX}`}
           fullWidth
           margin="normal"
           disabled={isPending}
@@ -116,10 +129,14 @@ export function GroupSettings({ group, onSaved }: GroupSettingsProps) {
         />
         <TextField
           label="Description"
-          value={values.description}
-          onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
-          error={!!fieldErrors.description}
-          helperText={fieldErrors.description ?? `${values.description.length}/${DESC_MAX}`}
+          {...register('description', {
+            validate: (value) =>
+              value.length > DESC_MAX
+                ? `Description must be at most ${DESC_MAX} characters.`
+                : true,
+          })}
+          error={!!errors.description}
+          helperText={errors.description?.message ?? `${descriptionValue.length}/${DESC_MAX}`}
           fullWidth
           multiline
           rows={3}
@@ -128,13 +145,15 @@ export function GroupSettings({ group, onSaved }: GroupSettingsProps) {
           inputProps={{ maxLength: DESC_MAX }}
         />
 
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={isPending}
-          style={{ marginTop: 16 }}
-        >
-          {isPending ? <><CircularProgress size={14} color="inherit" sx={{ mr: 1 }} />Saving…</> : 'Save Changes'}
+        <Button type="submit" variant="primary" disabled={isPending} style={{ marginTop: 16 }}>
+          {isPending ? (
+            <>
+              <CircularProgress size={14} color="inherit" sx={{ mr: 1 }} />
+              Saving…
+            </>
+          ) : (
+            'Save Changes'
+          )}
         </Button>
       </form>
 
@@ -148,7 +167,9 @@ export function GroupSettings({ group, onSaved }: GroupSettingsProps) {
       )}
 
       {state === 'failed' && error && (
-        <Typography variant="body2" color="error" sx={{ mt: 2 }}>{error}</Typography>
+        <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+          {error}
+        </Typography>
       )}
 
       {/* Diff confirmation modal */}
@@ -158,15 +179,23 @@ export function GroupSettings({ group, onSaved }: GroupSettingsProps) {
           {pendingDiff.map((d) => (
             <Typography key={d.field} variant="body2" sx={{ mb: 1 }}>
               <strong>{d.field}:</strong>{' '}
-              <span style={{ textDecoration: 'line-through', color: 'var(--color-text-secondary)' }}>{d.from || '(empty)'}</span>
+              <span
+                style={{ textDecoration: 'line-through', color: 'var(--color-text-secondary)' }}
+              >
+                {d.from || '(empty)'}
+              </span>
               {' → '}
               <span>{d.to || '(empty)'}</span>
             </Typography>
           ))}
         </DialogContent>
         <DialogActions>
-          <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleConfirm}>Confirm</Button>
+          <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleConfirm}>
+            Confirm
+          </Button>
         </DialogActions>
       </Dialog>
     </div>

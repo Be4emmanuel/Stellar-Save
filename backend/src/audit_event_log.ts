@@ -29,12 +29,17 @@
  */
 
 import crypto from 'crypto';
-import { Request, Response, NextFunction, Router } from 'express';
-import { prisma } from './prisma_client';
-import { logger } from './logger';
-import { adminAuthMiddleware, AuthenticatedRequest } from './auth_middleware';
+
+import { Router } from 'express';
 import { Gauge, Counter } from 'prom-client';
+
+import { adminAuthMiddleware } from './modules/auth/auth_middleware';
+import { logger } from './logger';
 import { registry } from './metrics';
+import { prisma } from './prisma_client';
+
+import type { AuthenticatedRequest } from './modules/auth/auth_middleware';
+import type { Request, Response, NextFunction} from 'express';
 
 // ── Prometheus metrics ────────────────────────────────────────────────────────
 
@@ -101,9 +106,19 @@ function computeHash(
   resourceId: string,
   before: string,
   after: string,
-  createdAt: string,
+  createdAt: string
 ): string {
-  const payload = [id, prevHash, actor, action, resourceType, resourceId, before, after, createdAt].join('|');
+  const payload = [
+    id,
+    prevHash,
+    actor,
+    action,
+    resourceType,
+    resourceId,
+    before,
+    after,
+    createdAt,
+  ].join('|');
   return crypto.createHash('sha256').update(payload, 'utf8').digest('hex');
 }
 
@@ -118,8 +133,9 @@ export class AuditEventLog {
    * concurrent writes can race on the same prevHash value.
    */
   static async record(input: AuditRecordInput): Promise<AuditEntry> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auditEventLog and $transaction with Serializable isolation are not yet in the generated Prisma client; pending schema migration
     return (prisma as any).$transaction(
-      async (tx: any) => {
+      async (tx: { auditEventLog: { findFirst: Function; create: Function } }) => {
         // Find the latest entry to chain from
         const latest = await tx.auditEventLog.findFirst({
           orderBy: { createdAt: 'desc' },
@@ -143,7 +159,7 @@ export class AuditEventLog {
           resourceId,
           beforeStr,
           afterStr,
-          now.toISOString(),
+          now.toISOString()
         );
 
         const entry = await tx.auditEventLog.create({
@@ -165,7 +181,7 @@ export class AuditEventLog {
         auditEntriesTotal.inc({ action: input.action });
         return entry as AuditEntry;
       },
-      { isolationLevel: 'Serializable' },
+      { isolationLevel: 'Serializable' }
     );
   }
 
@@ -178,6 +194,7 @@ export class AuditEventLog {
    * Designed to run as a periodic background job.
    */
   static async verify(limit = 100_000): Promise<VerificationResult> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auditEventLog model is pending Prisma migration; not yet in generated client
     const entries = await (prisma as any).auditEventLog.findMany({
       orderBy: { createdAt: 'asc' },
       take: limit,
@@ -221,7 +238,7 @@ export class AuditEventLog {
         e.resourceId ?? '',
         JSON.stringify(e.before ?? null),
         JSON.stringify(e.after ?? null),
-        new Date(e.createdAt).toISOString(),
+        new Date(e.createdAt).toISOString()
       );
 
       if (recomputed !== e.hash) {
@@ -297,7 +314,11 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  * audit-quality rather than a full diff, which would require hooking into each
  * service's DB layer individually.
  */
-export function auditMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export function auditMiddleware(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
   if (!MUTATING_METHODS.has(req.method)) {
     next();
     return;
@@ -310,7 +331,7 @@ export function auditMiddleware(req: AuthenticatedRequest, res: Response, next: 
     // Only audit successful mutations
     if (res.statusCode < 200 || res.statusCode >= 400) return;
 
-    const actor = req.walletAddress ?? (req as any).adminId ?? req.ip ?? 'anonymous';
+    const actor = req.walletAddress ?? (req as { adminId?: string }).adminId ?? req.ip ?? 'anonymous';
     const action = `${req.method} ${normalisePath(req.path)}`;
     const resourceType = inferResourceType(req.path);
     const resourceId = inferResourceId(req.params);
@@ -376,7 +397,7 @@ function summariseBody(body: unknown): Record<string, unknown> {
     Object.entries(obj)
       .filter(([k]) => !REDACTED.has(k))
       .slice(0, 20) // cap to 20 fields
-      .map(([k, v]) => [k, typeof v === 'object' ? '[object]' : v]),
+      .map(([k, v]) => [k, typeof v === 'object' ? '[object]' : v])
   );
 }
 
@@ -425,12 +446,14 @@ export function createAuditRouter(): Router {
       }
 
       const [entries, total] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auditEventLog model pending Prisma migration
         (prisma as any).auditEventLog.findMany({
           where,
           orderBy: { createdAt: 'desc' },
           take: limit,
           skip: offset,
         }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auditEventLog model pending Prisma migration
         (prisma as any).auditEventLog.count({ where }),
       ]);
 
@@ -461,12 +484,13 @@ export function createAuditRouter(): Router {
    */
   router.get('/:id', async (req: Request, res: Response) => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auditEventLog model pending Prisma migration
       const entry = await (prisma as any).auditEventLog.findUnique({
         where: { id: req.params.id },
       });
       if (!entry) return res.status(404).json({ error: 'Audit entry not found' });
       res.json(entry);
-    } catch (err) {
+    } catch {
       res.status(500).json({ error: 'Failed to fetch audit entry' });
     }
   });

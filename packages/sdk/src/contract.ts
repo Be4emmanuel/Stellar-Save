@@ -71,6 +71,9 @@ export const CONTRACT_FUNCTIONS = {
   IS_COMPLETE: 'is_complete',
   PAUSE_GROUP: 'pause_group',
   UNPAUSE_GROUP: 'unpause_group',
+  ACTIVATE_GROUP: 'activate_group',
+  GET_NEXT_RECIPIENT: 'get_next_recipient',
+  GET_GROUP_BALANCE: 'get_group_balance',
 } as const;
 
 export type ContractFunction = typeof CONTRACT_FUNCTIONS[keyof typeof CONTRACT_FUNCTIONS];

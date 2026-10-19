@@ -8,13 +8,31 @@
 //! - `types`:   Core contract-level types (`ContractConfig`, `MemberProfile`, etc.)
 //! - `contract`: All `#[contractimpl]` entry-point methods (thin facades to domain modules)
 //! - `group`, `contribution`, `payout`, `storage`, …: Domain modules
+//!
+//! ## Upgrade / migration path
+//!
+//! `stellar-save` is **not upgradeable in place**. The contract exposes no
+//! `upgrade`, `migrate`, or admin-gated WASM-replacement entrypoint, and the
+//! deployed contract address is immutable once installed. This is an explicit
+//! design constraint: pool, contribution, and payout storage are keyed by the
+//! contract instance, so replacing the WASM would silently orphan existing
+//! storage data.
+//!
+//! Because there is no in-place upgrade path, there is no migration test to
+//! write for an upgrade simulation. Any future version must be deployed as a
+//! new contract address, and existing state must be migrated by reading from
+//! the old contract and writing to the new one at the application layer.
+//!
+//! The `migration` and `migrations` modules below provide *data-shape*
+//! migrations for storage written by earlier versions of this same contract
+//! (e.g. schema/version bumps), not WASM upgrades.
 
 pub mod admin_actions_tests;
 pub mod auth;
 pub mod clone;
 pub mod constants;
-pub mod contribution;
 pub mod contract;
+pub mod contribution;
 pub mod cycle_advancement;
 pub mod deadline;
 pub mod error;
@@ -37,8 +55,10 @@ pub mod status;
 pub mod storage;
 pub mod storage_benchmark;
 pub mod storage_optimization;
+pub mod time_source;
 pub mod token;
 pub mod types;
+pub mod zk_proof;
 
 // mod auto_contribution_tests;
 pub mod cei_tests;
@@ -55,6 +75,7 @@ pub mod milestones;
 // mod mutation_tests;
 // mod upgrade_tests;
 pub mod wrapping_audit;
+pub mod zk_integration_tests;
 pub mod zk_tests;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────

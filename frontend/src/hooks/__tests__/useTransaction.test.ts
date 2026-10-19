@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useTransaction, explorerUrl, STELLAR_NETWORK } from '../useTransaction';
 
 // Use the shared mock — no live Horizon/RPC calls in unit tests.
@@ -69,9 +70,7 @@ describe('useTransaction', () => {
   it('surfaces the rejection reason of a mocked Stellar SDK submitTransaction call', async () => {
     const { Horizon } = await import('@stellar/stellar-sdk');
     const server = new Horizon.Server('https://horizon-testnet.stellar.org');
-    (server.submitTransaction as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('bad_seq')
-    );
+    (server.submitTransaction as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('bad_seq'));
 
     const { result } = renderHook(() => useTransaction());
     await act(async () => {

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { TriggerPayoutButton } from '../components/TriggerPayoutButton';
 
 // ── Mock useContract ──────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ describe('TriggerPayoutButton', () => {
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'success', message: expect.stringContaining('tx_success') }),
+        expect.objectContaining({ type: 'success', message: expect.stringContaining('tx_success') })
       );
       expect(onSuccess).toHaveBeenCalledWith('tx_success');
     });
@@ -100,7 +101,7 @@ describe('TriggerPayoutButton', () => {
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'error', message: 'Insufficient funds' }),
+        expect.objectContaining({ type: 'error', message: 'Insufficient funds' })
       );
     });
   });

@@ -1,19 +1,24 @@
-import { Request, Response, NextFunction } from 'express';
-import { createRateLimiterMiddleware, RateLimiterOptions } from './rate_limiter';
-import * as redis from './redis';
-import { logger } from './logger';
-
 /**
  * Middleware for caching analytics GET requests
  */
-export function createAnalyticsCacheMiddleware(ttlSeconds: number = 3600) {
+import { logger } from './logger';
+import { createRateLimiterMiddleware } from './rate_limiter';
+import * as redis from './redis';
+import { CacheKeyBuilder } from './lib/cache-key-builder';
+import { CACHE_TTL_SECONDS } from './lib/cache-config';
+
+import type { RateLimiterOptions } from './rate_limiter';
+import type { Request, Response, NextFunction } from 'express';
+
+
+export function createAnalyticsCacheMiddleware(ttlSeconds: number = CACHE_TTL_SECONDS.ANALYTICS_HTTP_RESPONSE) {
   return async (req: Request, res: Response, next: NextFunction) => {
     // Only cache GET requests
     if (req.method !== 'GET') {
       return next();
     }
 
-    const cacheKey = `http_cache:${req.originalUrl || req.url}`;
+    const cacheKey = CacheKeyBuilder.httpResponse(req.originalUrl || req.url);
 
     try {
       // Try to get from cache
@@ -26,6 +31,7 @@ export function createAnalyticsCacheMiddleware(ttlSeconds: number = 3600) {
       // Store original res.json to intercept response
       const originalJson = res.json.bind(res);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- overriding Express res.json which accepts any serialisable body
       res.json = (data: any) => {
         // Cache the response
         redis.set(cacheKey, data, ttlSeconds).catch((err) => {
@@ -86,7 +92,7 @@ export function createAnalyticsWriteRateLimiter() {
  * Middleware stack for analytics endpoints
  */
 export function createAnalyticsMiddlewareStack() {
-  const cacheMiddleware = createAnalyticsCacheMiddleware(3600); // 1 hour cache
+  const cacheMiddleware = createAnalyticsCacheMiddleware(CACHE_TTL_SECONDS.ANALYTICS_HTTP_RESPONSE);
   const readRateLimiter = createAnalyticsRateLimiter();
   const writeRateLimiter = createAnalyticsWriteRateLimiter();
 

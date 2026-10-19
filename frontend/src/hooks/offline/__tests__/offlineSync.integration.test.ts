@@ -1,7 +1,9 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { useQueueAction } from '../useQueueAction';
 import { useSyncStatus } from '../useSyncStatus';
+
 import type { ConnectionStatus, SyncStatus } from '../../../lib/syncService';
 
 // In-memory fake queue shared between the mocked syncService and db modules,
@@ -9,7 +11,6 @@ import type { ConnectionStatus, SyncStatus } from '../../../lib/syncService';
 // same underlying "storage" the way they would against real IndexedDB.
 let queue: string[] = [];
 let syncStatusCallback: ((status: SyncStatus) => void) | null = null;
-let connectionStatusCallback: ((status: ConnectionStatus) => void) | null = null;
 
 vi.mock('../../../lib/syncService', () => ({
   queueAction: vi.fn(async (type: string) => {
@@ -29,9 +30,8 @@ vi.mock('../../../lib/syncService', () => ({
     };
   }),
   onConnectionStatusChange: vi.fn((cb: (s: ConnectionStatus) => void) => {
-    connectionStatusCallback = cb;
     return () => {
-      connectionStatusCallback = null;
+      void cb;
     };
   }),
   getConnectionStatus: vi.fn(async (): Promise<ConnectionStatus> => 'online'),

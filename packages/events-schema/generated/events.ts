@@ -283,6 +283,67 @@ export interface MemberReferredEvent {
   referredAt: bigint;
 }
 
+export interface GroupDissolvedEvent {
+  type: 'group_dissolved';
+  groupId: bigint;
+  dissolvedAt: bigint;
+  totalRefunded: bigint;
+}
+
+export interface GroupClonedEvent {
+  type: 'group_cloned';
+  originalGroupId: bigint;
+  newGroupId: bigint;
+  creator: string;
+  clonedAt: bigint;
+}
+
+export interface CycleDeadlineExtendedEvent {
+  type: 'cycle_deadline_extended';
+  groupId: bigint;
+  cycle: number;
+  extensionSeconds: bigint;
+  newDeadline: bigint;
+  extendedBy: string;
+  extendedAt: bigint;
+}
+
+export interface ContractUpgradedEvent {
+  type: 'contract_upgraded';
+  upgradedBy: string;
+  oldVersion: number;
+  newVersion: number;
+  upgradedAt: bigint;
+}
+
+export interface ContributionReceiptEvent {
+  type: 'contribution_receipt';
+  groupId: bigint;
+  member: string;
+  amount: bigint;
+  cycle: number;
+  timestamp: bigint;
+}
+
+export interface DisputeRaisedEvent {
+  type: 'dispute_raised';
+  groupId: bigint;
+  raisedBy: string;
+  reason: string;
+  voteCount: number;
+  threshold: number;
+  autoPaused: boolean;
+  raisedAt: bigint;
+}
+
+export interface DisputeResolvedEvent {
+  type: 'dispute_resolved';
+  groupId: bigint;
+  resolvedBy: string;
+  resolution: string;
+  resolvedAt: bigint;
+}
+
 export type ContractEvent =
   | GroupCreatedEvent
   | MemberJoinedEvent
@@ -316,7 +377,14 @@ export type ContractEvent =
   | GroupRatedEvent
   | FeePaidEvent
   | RefundIssuedEvent
-  | MemberReferredEvent;
+  | MemberReferredEvent
+  | GroupDissolvedEvent
+  | GroupClonedEvent
+  | CycleDeadlineExtendedEvent
+  | ContractUpgradedEvent
+  | ContributionReceiptEvent
+  | DisputeRaisedEvent
+  | DisputeResolvedEvent;
 
 export type ContractEventTopic = ContractEvent['type'];
 
@@ -354,4 +422,11 @@ export const CONTRACT_EVENT_TOPICS: ContractEventTopic[] = [
   'fee_paid',
   'refund_issued',
   'member_referred',
+  'group_dissolved',
+  'group_cloned',
+  'cycle_deadline_extended',
+  'contract_upgraded',
+  'contribution_receipt',
+  'dispute_raised',
+  'dispute_resolved',
 ];

@@ -1,11 +1,19 @@
 /**
- * Shared ESLint flat-config base.
- * Extend in each package's eslint.config.js:
+ * Shared ESLint flat-config base for every workspace (frontend, backend, mobile).
  *
- *   import base from '../../eslint.config.base.js';
- *   export default [...base, { ... package-specific rules ... }];
+ * This is the single source of truth for the recommended presets, shared
+ * rules, and common ignores. Workspace configs spread it first and add only
+ * genuine overrides (runtime globals, framework plugins, stricter severities):
+ *
+ *   import base from '../eslint.config.base.js';
+ *   export default [...base, { ... workspace-specific overrides ... }];
+ *
+ * Do not re-apply `js.configs.recommended` / `tseslint.configs.recommended`
+ * in a workspace: doing so resets the tuned rule options below to their
+ * preset defaults.
  */
 import js from '@eslint/js';
+import importPlugin from 'eslint-plugin-import';
 import tseslint from 'typescript-eslint';
 
 /** @type {import('typescript-eslint').ConfigArray} */
@@ -13,16 +21,36 @@ const base = tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    plugins: {
+      import: importPlugin,
+    },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
-      'import/no-cycle': ['error', { maxDepth: 'infinity' }],
+      'import/no-cycle': ['error'],
+      // Import grouping convention (external → internal → parent/sibling → index → type):
+      //  1. builtin      Node built-ins (fs, path, ...)
+      //  2. external     third-party packages (react, @mui, ...)
+      //  3. internal     TS path aliases / workspace imports
+      //  4. parent/sibling  relative imports (../, ./)
+      //  5. index        index files
+      //  6. object, type
+      // Each group is separated by a blank line; within a group imports are
+      // alphabetized ascending, case-insensitively.
       'import/order': [
         'error',
         {
-          groups: ['builtin', 'external', 'internal', ['parent', 'sibling'], 'index', 'object', 'type'],
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            ['parent', 'sibling'],
+            'index',
+            'object',
+            'type',
+          ],
           'newlines-between': 'always',
           alphabetize: { order: 'asc', caseInsensitive: true },
         },
@@ -31,7 +59,7 @@ const base = tseslint.config(
   },
   {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.d.ts'],
-  },
+  }
 );
 
 export default base;

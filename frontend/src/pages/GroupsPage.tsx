@@ -3,7 +3,6 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Stack, Typography } from '@mui/material';
 import { AppCard, AppLayout } from '../ui';
 import { GroupList } from '../components/GroupList';
-import { Button } from '../components/Button';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorState } from '../components/ErrorState';
 import { useGroupsQuery } from '../hooks/useGroupsQuery';

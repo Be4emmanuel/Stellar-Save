@@ -279,6 +279,6 @@ echo "========================================================"
 echo ""
 
 # Copy report to workspace for CI artifact upload
-cp "${REPORT}" "ssl_drill_report.json" 2>/dev/null || true
+cp "${REPORT}" "docs/releases/ssl_drill_report.json" 2>/dev/null || true
 
 [[ "${PASS}" == "true" ]] || exit 1

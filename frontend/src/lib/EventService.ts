@@ -12,8 +12,10 @@
  * Singleton — import `eventService` at the bottom of this file.
  */
 
-import { SorobanRpc, scValToNative, xdr } from '@stellar/stellar-sdk';
+import { scValToNative, xdr } from '@stellar/stellar-sdk';
+
 import { server, CONTRACT_ID } from './contractClient';
+import { env } from './env';
 import type {
   AppEvent,
   EventType,
@@ -22,15 +24,15 @@ import type {
   PayoutExecutedEvent,
   GroupPausedEvent,
 } from '../types/events';
+import type { SorobanRpc } from '@stellar/stellar-sdk';
 
 export const PAGE_SIZE = 20;
 
 // ─── Tunables ────────────────────────────────────────────────────────────────
 
-const SSE_BASE_URL: string =
-  (import.meta.env['VITE_API_BASE_URL'] as string | undefined) ?? '/api/v1';
-const DEBOUNCE_MS = 300;          // coalesce bursts within 300 ms
-const POLL_INTERVAL_MS = 10_000;  // fallback polling interval
+const SSE_BASE_URL: string = env.VITE_API_BASE_URL;
+const DEBOUNCE_MS = 300; // coalesce bursts within 300 ms
+const POLL_INTERVAL_MS = 10_000; // fallback polling interval
 const SSE_RECONNECT_BASE_MS = 2_000;
 const SSE_RECONNECT_MAX_MS = 60_000;
 
@@ -40,15 +42,11 @@ function parseRawEvent(raw: SorobanRpc.Api.RawEventResponse): AppEvent | null {
   try {
     if (raw.type !== 'contract') return null;
 
-    const topics = raw.topic.map((t) =>
-      scValToNative(xdr.ScVal.fromXDR(t, 'base64')),
-    );
+    const topics = raw.topic.map((t) => scValToNative(xdr.ScVal.fromXDR(t, 'base64')));
     const eventName = topics[0] as string | undefined;
     if (!eventName) return null;
 
-    const body = raw.value
-      ? scValToNative(xdr.ScVal.fromXDR(raw.value, 'base64'))
-      : {};
+    const body = raw.value ? scValToNative(xdr.ScVal.fromXDR(raw.value, 'base64')) : {};
 
     const data = body as Record<string, unknown>;
 
@@ -196,7 +194,11 @@ export class EventService {
   private dispatchImmediate(event: AppEvent): void {
     for (const listener of this.listeners) {
       if (listener.type === 'all' || listener.type === event.type) {
-        try { listener.callback(event); } catch { /* ignore handler errors */ }
+        try {
+          listener.callback(event);
+        } catch {
+          /* ignore handler errors */
+        }
       }
     }
   }
@@ -215,9 +217,7 @@ export class EventService {
         {
           type: 'contract',
           contractIds: [CONTRACT_ID],
-          ...(types && types.length > 0
-            ? { topics: [types.map((t) => `sym:${t}`)] }
-            : {}),
+          ...(types && types.length > 0 ? { topics: [types.map((t) => `sym:${t}`)] } : {}),
         },
       ];
 
@@ -230,9 +230,7 @@ export class EventService {
       const response = await server.getEvents(request);
       const rawEvents = response.events ?? [];
 
-      let parsed = rawEvents
-        .map(parseRawEvent)
-        .filter((e): e is AppEvent => e !== null);
+      let parsed = rawEvents.map(parseRawEvent).filter((e): e is AppEvent => e !== null);
 
       if (groupId !== undefined) {
         parsed = parsed.filter((e) => {
@@ -260,7 +258,9 @@ export class EventService {
     try {
       const seed = await this.fetchEvents({ limit: 1 });
       this.latestCursor = seed.nextCursor;
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
 
     this.connectSSE();
   }
@@ -301,7 +301,9 @@ export class EventService {
           // Backend sends events in the same shape as AppEvent
           const event = raw as unknown as AppEvent;
           if (event.type) this.scheduleFlush(event);
-        } catch { /* ignore malformed */ }
+        } catch {
+          /* ignore malformed */
+        }
       };
 
       this.sseSource.onerror = () => {
@@ -344,7 +346,9 @@ export class EventService {
 
   private startPolling(): void {
     if (this.pollTimer !== null) return;
-    this.pollTimer = setInterval(() => { void this.poll(); }, POLL_INTERVAL_MS);
+    this.pollTimer = setInterval(() => {
+      void this.poll();
+    }, POLL_INTERVAL_MS);
   }
 
   private stopPolling(): void {
@@ -370,7 +374,9 @@ export class EventService {
         this.scheduleFlush(event);
       }
       if (result.nextCursor) this.latestCursor = result.nextCursor;
-    } catch { /* swallow, retry next interval */ }
+    } catch {
+      /* swallow, retry next interval */
+    }
   }
 }
 

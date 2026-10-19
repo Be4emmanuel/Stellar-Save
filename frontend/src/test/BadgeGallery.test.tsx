@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+
 import { BadgeGallery } from '../components/BadgeGallery';
+
 import type { MemberBadge } from '../hooks/useMemberBadges';
 
 describe('BadgeGallery', () => {
@@ -74,7 +76,7 @@ describe('BadgeGallery', () => {
 
     const times = screen.getAllByRole('time');
     expect(times.length).toBe(mockBadges.length);
-    times.forEach((time, idx) => {
+    times.forEach((time) => {
       expect(time).toHaveAttribute('datetime');
       expect(time.getAttribute('datetime')).toContain('T'); // ISO format check
     });

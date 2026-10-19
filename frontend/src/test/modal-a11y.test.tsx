@@ -20,18 +20,19 @@
  */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { axe, toHaveNoViolations } from 'jest-axe';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { ContributeButton } from '../components/ContributeButton';
+import { GroupSettings } from '../components/GroupSettings';
 import { JoinGroupModal } from '../components/JoinGroupModal';
 import { TemplatePreviewModal } from '../components/templates/TemplatePreviewModal';
 import { SaveTemplateModal } from '../components/TransactionBuilder/SaveTemplateModal';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 import { WalletSelectModal } from '../components/WalletSelectModal';
-import { ContributeButton } from '../components/ContributeButton';
-import { GroupSettings } from '../components/GroupSettings';
-import { useWallet } from '../hooks/useWallet';
 import { useContract } from '../hooks/useContract';
+import { useWallet } from '../hooks/useWallet';
+
 import type { PublicGroup, GroupDetail } from '../types/group';
 import type { GroupTemplate } from '../types/template';
 import type { Transaction } from '../types/transaction';
@@ -174,9 +175,7 @@ describe('SaveTemplateModal – accessibility', () => {
 
   it('has an accessible name from the visible title', () => {
     render(<SaveTemplateModal open onClose={vi.fn()} steps={steps} />);
-    expect(
-      screen.getByRole('dialog', { name: /save transaction template/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /save transaction template/i })).toBeInTheDocument();
   });
 
   it('closes on Escape', () => {
@@ -275,9 +274,7 @@ describe('ContributeButton confirmation dialog – accessibility', () => {
 
   it('has no axe violations when open', async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <ContributeButton amount={25} cycleId={2} walletAddress="GABC" />
-    );
+    const { container } = render(<ContributeButton amount={25} cycleId={2} walletAddress="GABC" />);
     await user.click(screen.getByRole('button', { name: /contribute/i }));
     expect(await axe(container)).toHaveNoViolations();
   });

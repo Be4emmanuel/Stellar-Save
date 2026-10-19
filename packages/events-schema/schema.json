@@ -316,6 +316,76 @@
         "referrer": "address",
         "referred_at": "u64"
       }
+    },
+    "group_dissolved": {
+      "topic": "group_dissolved",
+      "fields": {
+        "group_id": "u64",
+        "dissolved_at": "u64",
+        "total_refunded": "i128"
+      }
+    },
+    "group_cloned": {
+      "topic": "group_cloned",
+      "fields": {
+        "original_group_id": "u64",
+        "new_group_id": "u64",
+        "creator": "address",
+        "cloned_at": "u64"
+      }
+    },
+    "cycle_deadline_extended": {
+      "topic": "cycle_deadline_extended",
+      "fields": {
+        "group_id": "u64",
+        "cycle": "u32",
+        "extension_seconds": "u64",
+        "new_deadline": "u64",
+        "extended_by": "address",
+        "extended_at": "u64"
+      }
+    },
+    "contract_upgraded": {
+      "topic": "contract_upgraded",
+      "fields": {
+        "upgraded_by": "address",
+        "old_version": "u32",
+        "new_version": "u32",
+        "upgraded_at": "u64"
+      }
+    },
+    "contribution_receipt": {
+      "topic": "contribution_receipt",
+      "fields": {
+        "group_id": "u64",
+        "member": "address",
+        "amount": "i128",
+        "cycle": "u32",
+        "timestamp": "u64"
+      }
+    },
+    "dispute_raised": {
+      "topic": "dispute_raised",
+      "description": "Emitted as a positional tuple in field order.",
+      "fields": {
+        "group_id": "u64",
+        "raised_by": "address",
+        "reason": "string",
+        "vote_count": "u32",
+        "threshold": "u32",
+        "auto_paused": "bool",
+        "raised_at": "u64"
+      }
+    },
+    "dispute_resolved": {
+      "topic": "dispute_resolved",
+      "description": "Emitted as a positional tuple in field order.",
+      "fields": {
+        "group_id": "u64",
+        "resolved_by": "address",
+        "resolution": "string",
+        "resolved_at": "u64"
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
+
 import { GroupCardHeader } from '../components/GroupCardHeader';
 
 describe('GroupCardHeader', () => {
@@ -10,7 +11,9 @@ describe('GroupCardHeader', () => {
   });
 
   it('renders description when provided', () => {
-    render(<GroupCardHeader groupName="Alpha Savers" status="active" description="A great group" />);
+    render(
+      <GroupCardHeader groupName="Alpha Savers" status="active" description="A great group" />
+    );
     expect(screen.getByText('A great group')).toBeInTheDocument();
   });
 
@@ -20,7 +23,13 @@ describe('GroupCardHeader', () => {
   });
 
   it('renders the image when imageUrl is provided', () => {
-    render(<GroupCardHeader groupName="Alpha Savers" status="active" imageUrl="https://example.com/a.png" />);
+    render(
+      <GroupCardHeader
+        groupName="Alpha Savers"
+        status="active"
+        imageUrl="https://example.com/a.png"
+      />
+    );
     const img = screen.getByRole('img');
     expect(img).toHaveAttribute('src', 'https://example.com/a.png');
     expect(img).toHaveAttribute('alt', 'Alpha Savers');
@@ -53,7 +62,7 @@ describe('GroupCardHeader', () => {
         status="active"
         imageUrl="https://example.com/d.png"
         description="Pool description"
-      />,
+      />
     );
     expect(screen.getByRole('img')).toBeInTheDocument();
     expect(screen.getByText('Pool description')).toBeInTheDocument();
@@ -61,7 +70,11 @@ describe('GroupCardHeader', () => {
 
   it('image alt text matches the group name', () => {
     render(
-      <GroupCardHeader groupName="Epsilon Group" status="active" imageUrl="https://example.com/e.png" />,
+      <GroupCardHeader
+        groupName="Epsilon Group"
+        status="active"
+        imageUrl="https://example.com/e.png"
+      />
     );
     expect(screen.getByAltText('Epsilon Group')).toBeInTheDocument();
   });

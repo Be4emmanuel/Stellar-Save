@@ -1,8 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   calculateCycleProgress,
-  calculateCycleProgressFromDeadline,
-  type CycleProgressResult
+  calculateCycleProgressFromDeadline
 } from '../utils/cycleProgress';
 
 // Mock Date for consistent testing

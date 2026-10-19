@@ -1,7 +1,10 @@
 import {
-  NotificationPreferenceRepository,
-  NotificationPreferencePrisma,
+  NotificationPreferenceRepository
 } from '../modules/notifications/notification-preference.repository';
+import { NotificationFactory } from '../../test/fixtures/factory';
+
+import type {
+  NotificationPreferencePrisma} from '../modules/notifications/notification-preference.repository';
 
 function mockDb() {
   return {
@@ -28,13 +31,15 @@ describe('NotificationPreferenceRepository', () => {
   });
 
   it('findByUserId queries by userId', async () => {
-    db.notificationPreference.findUnique.mockResolvedValue({ userId: 'u1' });
+    const pref = NotificationFactory.buildPreference('u1');
+    db.notificationPreference.findUnique.mockResolvedValue(pref);
     await repo.findByUserId('u1');
     expect(db.notificationPreference.findUnique).toHaveBeenCalledWith({ where: { userId: 'u1' } });
   });
 
   it('findByUnsubscribeToken queries by unsubscribeToken', async () => {
-    db.notificationPreference.findUnique.mockResolvedValue(null);
+    const pref = NotificationFactory.buildPreference('u2', { unsubscribeToken: 'tok-123' });
+    db.notificationPreference.findUnique.mockResolvedValue(pref);
     await repo.findByUnsubscribeToken('tok-123');
     expect(db.notificationPreference.findUnique).toHaveBeenCalledWith({
       where: { unsubscribeToken: 'tok-123' },
@@ -70,7 +75,7 @@ describe('NotificationPreferenceRepository', () => {
     db.notificationPreference.updateMany.mockResolvedValue({ count: 3 });
 
     await expect(
-      repo.updateManyByUserIds(['a', 'b', 'c'], { emailFrequency: 'weekly' }),
+      repo.updateManyByUserIds(['a', 'b', 'c'], { emailFrequency: 'weekly' })
     ).resolves.toBe(3);
     expect(db.notificationPreference.updateMany).toHaveBeenCalledWith({
       where: { userId: { in: ['a', 'b', 'c'] } },
@@ -84,6 +89,8 @@ describe('NotificationPreferenceRepository', () => {
     expect(db.notificationPreference.count).toHaveBeenCalledWith(undefined);
 
     await repo.count({ emailNotifications: true });
-    expect(db.notificationPreference.count).toHaveBeenCalledWith({ where: { emailNotifications: true } });
+    expect(db.notificationPreference.count).toHaveBeenCalledWith({
+      where: { emailNotifications: true },
+    });
   });
 });

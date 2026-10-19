@@ -1,6 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { GroupList, Group } from '../components/GroupList';
+import { describe, it, expect, vi } from 'vitest';
+
+import { GroupList } from '../components/GroupList';
+
+import type { Group } from '../components/GroupList';
 
 const mockGroups: Group[] = [
   {
@@ -44,11 +47,7 @@ describe('GroupList', () => {
 
   it('shows empty state when no groups', () => {
     render(
-      <GroupList
-        groups={[]}
-        emptyTitle="No groups"
-        emptyDescription="Create your first group"
-      />
+      <GroupList groups={[]} emptyTitle="No groups" emptyDescription="Create your first group" />
     );
 
     expect(screen.getByText('No groups')).toBeInTheDocument();
@@ -59,11 +58,7 @@ describe('GroupList', () => {
     const handleEmptyAction = vi.fn();
 
     render(
-      <GroupList
-        groups={[]}
-        emptyActionLabel="Create Group"
-        onEmptyAction={handleEmptyAction}
-      />
+      <GroupList groups={[]} emptyActionLabel="Create Group" onEmptyAction={handleEmptyAction} />
     );
 
     const actionButton = screen.getByText('Create Group');
