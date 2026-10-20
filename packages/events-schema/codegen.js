@@ -87,4 +87,4 @@ if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
 const outPath = path.join(outDir, 'events.ts');
 fs.writeFileSync(outPath, lines.join('\n'), 'utf8');
-console.log(`Generated ${outPath} (${typeNames.length} event types)`);
+process.stdout.write(`Generated ${outPath} (${typeNames.length} event types)\n`);

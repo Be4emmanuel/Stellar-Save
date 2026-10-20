@@ -21,8 +21,8 @@ import { Link } from 'react-router-dom';
 import { copyToClipboard } from '../lib/clipboard';
 import type { MemberProfile, MemberDirectoryFilters, MemberSortOption } from '../types/member';
 import { DEFAULT_MEMBER_FILTERS } from '../types/member';
-import { formatAddress } from '../utils/formatAddress';
-import { formatAmount } from '../utils/formatAmount';
+import { formatAddress } from '@shared-utils/formatting';
+import { formatAmount } from '@shared-utils/formatting';
 
 // ── Avatar ───────────────────────────────────────────────────────────────────
 
