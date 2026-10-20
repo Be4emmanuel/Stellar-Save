@@ -2,17 +2,46 @@
 
 Soroban enforces a **100 KB WASM size limit**. The CI gate in `.github/workflows/contract-size.yml` blocks merges that exceed this limit and warns at 80%.
 
+## Current status
+
+The workspace `[profile.release]` in `Cargo.toml` already uses all recommended size-optimisation
+flags:
+
+```toml
+[profile.release]
+opt-level = "z"        # ✅ already set — optimize for size
+lto = true             # ✅ already set — link-time optimization
+codegen-units = 1      # ✅ already set — single codegen unit for better LTO
+strip = "symbols"      # ✅ already set — strip debug symbols
+panic = "abort"        # ✅ already set — removes unwinding machinery
+overflow-checks = true # kept for safety
+debug = 0              # ✅ already set — no debug info
+```
+
+No further compiler profile changes are needed. If size regressions occur, focus on
+[post-build optimisation with wasm-opt](#post-build-optimization-with-wasm-opt) or
+[code-level techniques](#code-level-techniques).
+
 ## Checking size locally
 
 ```bash
+# Full report with history trend and markdown output:
 bash scripts/check_contract_size.sh
+
+# Lightweight CI gate (fast pass/fail, no history tracking):
+bash scripts/size_check_ci.sh
 ```
 
-Outputs the size, % of limit used, trend vs previous build, and a markdown report at `deployment-records/size_report.md`.
+`check_contract_size.sh` outputs the size, % of limit used, trend vs previous build, and a
+markdown report at `deployment-records/size_report.md`.
+
+`size_check_ci.sh` is designed for fast CI feedback — it emits GitHub Actions annotations and
+exits with a non-zero status code if the contract exceeds the limit.
 
 ## Compiler profile (biggest wins first)
 
-Add to `contracts/stellar-save/Cargo.toml`:
+The workspace `Cargo.toml` already contains all of these. This section is preserved for reference
+when evaluating new flags.
 
 ```toml
 [profile.release]
@@ -22,7 +51,7 @@ codegen-units = 1    # single codegen unit enables better LTO
 strip = true         # strip debug symbols from WASM
 ```
 
-Expected combined saving: **20–40%**.
+Expected combined saving over defaults: **20–40%**.
 
 ## Post-build optimization with wasm-opt
 

@@ -18,8 +18,8 @@ import {
   Collapse,
 } from '@mui/material';
 import { Button } from './Button';
-import { formatAddress } from '@shared-utils/formatting';
-import { formatAmount } from '@shared-utils/formatting';
+
+import { formatAddress, formatAmount } from '@shared-utils/formatting';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

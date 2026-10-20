@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { logger } from './logger';
-
-const prisma = new PrismaClient();
+import { prisma } from './prisma_client';
 
 /**
  * Notification Template Types
@@ -214,7 +212,7 @@ export class NotificationTemplateManager {
         templateKey: 'email_group_invitation',
         templateName: 'Group Invitation - Email',
         templateType: NotificationTemplateType.Email,
-        subject: 'You\'re invited to join {{groupName}}',
+        subject: "You're invited to join {{groupName}}",
         htmlContent:
           <html>
             <body style="font-family: Arial, sans-serif; color: #333;">

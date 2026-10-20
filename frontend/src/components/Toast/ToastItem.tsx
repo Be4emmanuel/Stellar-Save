@@ -1,12 +1,6 @@
+import { Alert, AlertTitle, Box, Button, Stack, keyframes } from '@mui/material';
 import React, { useCallback, useEffect, useRef } from 'react';
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Stack,
-  keyframes,
-} from '@mui/material';
+
 import type { Toast } from './types';
 
 const slideIn = keyframes`
@@ -124,14 +118,20 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose }) => {
   return (
     <Box
       sx={{
-        animation: isExiting
-          ? `${slideOut} 0.3s ease-in-out forwards`
-          : `${slideIn} 0.3s ease-out`,
+        animation: isExiting ? `${slideOut} 0.3s ease-in-out forwards` : `${slideIn} 0.3s ease-out`,
       }}
     >
       <Alert
         icon={getIcon()}
-        severity={toast.type === 'success' ? 'success' : toast.type === 'error' ? 'error' : toast.type === 'warning' ? 'warning' : 'info'}
+        severity={
+          toast.type === 'success'
+            ? 'success'
+            : toast.type === 'error'
+              ? 'error'
+              : toast.type === 'warning'
+                ? 'warning'
+                : 'info'
+        }
         sx={{
           minWidth: '300px',
           maxWidth: '400px',

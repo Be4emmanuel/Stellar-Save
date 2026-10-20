@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+
 import { Avatar } from '../components/Avatar';
 
 describe('Avatar', () => {
@@ -32,15 +33,13 @@ describe('Avatar', () => {
   });
 
   it('falls back to initials when image fails to load', async () => {
-    const { container } = render(
-      <Avatar src="invalid-url.jpg" name="Jane Smith" />
-    );
-    
+    const { container } = render(<Avatar src="invalid-url.jpg" name="Jane Smith" />);
+
     const img = container.querySelector('img');
     if (img) {
       img.dispatchEvent(new Event('error'));
     }
-    
+
     await waitFor(() => {
       expect(screen.getByText('JS')).toBeInTheDocument();
     });

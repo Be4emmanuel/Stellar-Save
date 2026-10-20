@@ -1,9 +1,10 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { ContributionScheduler } from '../components/ContributionScheduler';
-import * as useScheduledContributionsModule from '../hooks/useScheduledContributions';
 import * as useBalanceModule from '../hooks/useBalance';
+import * as useScheduledContributionsModule from '../hooks/useScheduledContributions';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -83,19 +84,33 @@ describe('ContributionScheduler', () => {
 
   it('calls add() with correct data on valid submit', async () => {
     const user = userEvent.setup();
-    mockAdd.mockReturnValue({ id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 50, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() });
+    mockAdd.mockReturnValue({
+      id: 'sc_1',
+      groupId: 'g1',
+      groupName: 'Test Group',
+      amount: 50,
+      scheduledDate: FUTURE_ISO,
+      createdAt: new Date().toISOString(),
+    });
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     await user.type(screen.getByLabelText(/scheduled date and time/i), FUTURE_DATE);
     await user.type(screen.getByLabelText(/note/i), 'My note');
     await user.click(screen.getByRole('button', { name: /schedule/i }));
     expect(mockAdd).toHaveBeenCalledWith(
-      expect.objectContaining({ groupId: 'g1', amount: 50, note: 'My note' }),
+      expect.objectContaining({ groupId: 'g1', amount: 50, note: 'My note' })
     );
   });
 
   it('renders scheduled contributions list', () => {
     mockScheduler([
-      { id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 75, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() },
+      {
+        id: 'sc_1',
+        groupId: 'g1',
+        groupName: 'Test Group',
+        amount: 75,
+        scheduledDate: FUTURE_ISO,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     expect(screen.getByRole('list', { name: /scheduled contributions/i })).toBeInTheDocument();
@@ -105,7 +120,14 @@ describe('ContributionScheduler', () => {
   it('calls remove() when cancel button is clicked', async () => {
     const user = userEvent.setup();
     mockScheduler([
-      { id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 75, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() },
+      {
+        id: 'sc_1',
+        groupId: 'g1',
+        groupName: 'Test Group',
+        amount: 75,
+        scheduledDate: FUTURE_ISO,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     await user.click(screen.getByRole('button', { name: /cancel scheduled contribution/i }));
@@ -115,7 +137,14 @@ describe('ContributionScheduler', () => {
   it('enters edit mode when edit button is clicked', async () => {
     const user = userEvent.setup();
     mockScheduler([
-      { id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 75, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() },
+      {
+        id: 'sc_1',
+        groupId: 'g1',
+        groupName: 'Test Group',
+        amount: 75,
+        scheduledDate: FUTURE_ISO,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     await user.click(screen.getByRole('button', { name: /edit scheduled contribution/i }));
@@ -126,7 +155,14 @@ describe('ContributionScheduler', () => {
   it('calls update() on save in edit mode', async () => {
     const user = userEvent.setup();
     mockScheduler([
-      { id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 75, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() },
+      {
+        id: 'sc_1',
+        groupId: 'g1',
+        groupName: 'Test Group',
+        amount: 75,
+        scheduledDate: FUTURE_ISO,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     await user.click(screen.getByRole('button', { name: /edit scheduled contribution/i }));
@@ -140,7 +176,14 @@ describe('ContributionScheduler', () => {
   it('cancels edit mode without saving', async () => {
     const user = userEvent.setup();
     mockScheduler([
-      { id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 75, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() },
+      {
+        id: 'sc_1',
+        groupId: 'g1',
+        groupName: 'Test Group',
+        amount: 75,
+        scheduledDate: FUTURE_ISO,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     await user.click(screen.getByRole('button', { name: /edit scheduled contribution/i }));
@@ -152,7 +195,14 @@ describe('ContributionScheduler', () => {
   it('shows balance warning when balance is insufficient', () => {
     mockBalance('10'); // balance < totalScheduled (75)
     mockScheduler([
-      { id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 75, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() },
+      {
+        id: 'sc_1',
+        groupId: 'g1',
+        groupName: 'Test Group',
+        amount: 75,
+        scheduledDate: FUTURE_ISO,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     expect(screen.getByRole('alert')).toHaveTextContent(/insufficient/i);
@@ -161,7 +211,14 @@ describe('ContributionScheduler', () => {
   it('does not show balance warning when balance is sufficient', () => {
     mockBalance('500');
     mockScheduler([
-      { id: 'sc_1', groupId: 'g1', groupName: 'Test Group', amount: 75, scheduledDate: FUTURE_ISO, createdAt: new Date().toISOString() },
+      {
+        id: 'sc_1',
+        groupId: 'g1',
+        groupName: 'Test Group',
+        amount: 75,
+        scheduledDate: FUTURE_ISO,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     render(<ContributionScheduler {...DEFAULT_PROPS} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();

@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { useReminderPreferences } from '../hooks/useReminderPreferences';
 import * as reminderPrefs from '../notifications/reminderPreferences';
 
@@ -163,7 +164,7 @@ describe('useReminderPreferences hook', () => {
   });
 
   it('should sync preferences when reminder-preferences-changed event fires', async () => {
-    const { result } = renderHook(() => useReminderPreferences());
+    renderHook(() => useReminderPreferences());
 
     const newPreferences = {
       enabled: false,
@@ -189,7 +190,7 @@ describe('useReminderPreferences hook', () => {
   });
 
   it('should handle storage event for cross-tab synchronization', async () => {
-    const { result } = renderHook(() => useReminderPreferences());
+    renderHook(() => useReminderPreferences());
 
     const newPreferences = {
       enabled: false,

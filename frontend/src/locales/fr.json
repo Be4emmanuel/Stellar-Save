@@ -7,12 +7,5 @@
     "appearanceDesc": "Choisissez l'apparence de Stellar Save.",
     "language": "Langue",
     "languageDesc": "Choisissez votre langue préférée."
-  },
-  "common": {
-    "save": "Enregistrer",
-    "cancel": "Annuler"
-  },
-  "scheduler": {
-    "balanceWarning": "Votre solde est de {{balance}} sur {{total}}"
   }
 }

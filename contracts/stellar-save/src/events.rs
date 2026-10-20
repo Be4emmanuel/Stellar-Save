@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use soroban_sdk::{contracttype, Address, Env, String};
 
 /// Event emitted when a new savings group is created.
@@ -80,6 +79,17 @@ pub struct PayoutExecuted {
     pub executed_at: u64,
 }
 
+/// Event emitted when a member misses a contribution deadline.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContributionMissed {
+    pub group_id: u64,
+    pub member: Address,
+    pub cycle: u32,
+    pub penalty_applied: i128,
+    pub missed_at: u64,
+}
+
 /// Event emitted when a group completes all cycles.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -143,6 +153,7 @@ pub struct ContractUnpaused {
     pub timestamp: u64,
 }
 
+/// Event emitted when a cycle is advanced via tick function.
 /// Event emitted when a contribution proof is verified (#479).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -193,12 +204,43 @@ pub struct GroupUnpaused {
     pub unpaused_at: u64,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupDissolved {
+    pub group_id: u64,
+    pub dissolved_at: u64,
+    pub total_refunded: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CycleDeadlineExtended {
+    pub group_id: u64,
+    pub cycle: u32,
+    pub extension_seconds: u64,
+    pub new_deadline: u64,
+    pub extended_by: Address,
+    pub extended_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupCloned {
+    pub original_group_id: u64,
+    pub new_group_id: u64,
+    pub creator: Address,
+    pub cloned_at: u64,
+}
+
 /// Event emitted when a cycle advances to the next cycle.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CycleAdvanced {
     pub group_id: u64,
+    pub old_cycle: u32,
     pub new_cycle: u32,
+    pub payout_executed: bool,
+    pub defaulted: bool,
     pub advanced_at: u64,
 }
 
@@ -210,6 +252,19 @@ pub struct RewardClaimed {
     pub member: Address,
     pub amount: i128,
     pub claimed_at: u64,
+}
+
+/// Event emitted when the contract binary is upgraded to a new version.
+///
+/// Centralising this type in `events.rs` ensures all upgrade callers emit a
+/// consistent shape (Issue #73).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractUpgraded {
+    pub upgraded_by: Address,
+    pub old_version: u32,
+    pub new_version: u32,
+    pub upgraded_at: u64,
 }
 
 /// Utility functions for emitting events.
@@ -522,12 +577,30 @@ impl EventEmitter {
         env.events().publish(("refund_issued",), event);
     }
 
-    pub fn emit_group_dissolved(
+    /// Emits an event when a member misses a contribution deadline.
+    ///
+    /// This helper was absent (issue #1715) — the `ContributionMissed` struct
+    /// existed but no corresponding `emit_*` function was provided, making the
+    /// `contribution_missed` schema entry dead code.
+    pub fn emit_contribution_missed(
         env: &Env,
         group_id: u64,
-        dissolved_at: u64,
-        total_refunded: i128,
+        member: Address,
+        cycle: u32,
+        penalty_applied: i128,
+        missed_at: u64,
     ) {
+        let event = ContributionMissed {
+            group_id,
+            member,
+            cycle,
+            penalty_applied,
+            missed_at,
+        };
+        env.events().publish(("contribution_missed",), event);
+    }
+
+    pub fn emit_group_dissolved(env: &Env, group_id: u64, dissolved_at: u64, total_refunded: i128) {
         let event = GroupDissolved {
             group_id,
             dissolved_at,
@@ -582,6 +655,26 @@ impl EventEmitter {
     pub fn emit_contract_unpaused(env: &Env, admin: Address, timestamp: u64) {
         let event = ContractUnpaused { admin, timestamp };
         env.events().publish(("contract_unpaused",), event);
+    }
+
+    pub fn emit_cycle_advanced(
+        env: &Env,
+        group_id: u64,
+        old_cycle: u32,
+        new_cycle: u32,
+        payout_executed: bool,
+        defaulted: bool,
+        advanced_at: u64,
+    ) {
+        let event = CycleAdvanced {
+            group_id,
+            old_cycle,
+            new_cycle,
+            payout_executed,
+            defaulted,
+            advanced_at,
+        };
+        env.events().publish(("cycle_advanced",), event);
     }
 
     pub fn emit_contribution_verified(
@@ -771,15 +864,6 @@ impl EventEmitter {
         env.events().publish(("groups_merged",), event);
     }
 
-    pub fn emit_cycle_advanced(env: &Env, group_id: u64, new_cycle: u32, advanced_at: u64) {
-        let event = CycleAdvanced {
-            group_id,
-            new_cycle,
-            advanced_at,
-        };
-        env.events().publish(("cycle_advanced",), event);
-    }
-
     pub fn emit_reward_claimed(
         env: &Env,
         group_id: u64,
@@ -928,6 +1012,62 @@ impl EventEmitter {
             referred_at,
         };
         env.events().publish(("member_referred",), event);
+    }
+
+    pub fn emit_dispute_raised(
+        env: &Env,
+        group_id: u64,
+        raised_by: Address,
+        reason: String,
+        vote_count: u32,
+        threshold: u32,
+        auto_paused: bool,
+        raised_at: u64,
+    ) {
+        env.events().publish(
+            ("dispute_raised",),
+            (
+                group_id,
+                raised_by,
+                reason,
+                vote_count,
+                threshold,
+                auto_paused,
+                raised_at,
+            ),
+        );
+    }
+
+    pub fn emit_dispute_resolved(
+        env: &Env,
+        group_id: u64,
+        resolved_by: Address,
+        resolution: String,
+        resolved_at: u64,
+    ) {
+        env.events().publish(
+            ("dispute_resolved",),
+            (group_id, resolved_by, resolution, resolved_at),
+        );
+    }
+
+    /// Emits an event when the contract is upgraded to a new version.
+    ///
+    /// Centralised here so all callers use the same topic/shape (Issue #73).
+    pub fn emit_contract_upgraded(
+        env: &Env,
+        upgraded_by: Address,
+        old_version: u32,
+        new_version: u32,
+        upgraded_at: u64,
+    ) {
+        let event = ContractUpgraded {
+            upgraded_by,
+            old_version,
+            new_version,
+            upgraded_at,
+        };
+        env.events().publish(("contract_upgraded",), event);
     }
 }
 
@@ -1166,6 +1306,33 @@ mod tests {
     }
 
     #[test]
+    fn test_cycle_advanced_event() {
+        let env = Env::default();
+
+        let event = CycleAdvanced {
+            group_id: 1,
+            old_cycle: 0,
+            new_cycle: 1,
+            payout_executed: true,
+            defaulted: false,
+            advanced_at: 1234567890,
+        };
+
+        assert_eq!(event.group_id, 1);
+        assert_eq!(event.old_cycle, 0);
+        assert_eq!(event.new_cycle, 1);
+        assert!(event.payout_executed);
+        assert!(!event.defaulted);
+    }
+
+    #[test]
+    fn test_event_emitter_cycle_advanced() {
+        let env = Env::default();
+
+        EventEmitter::emit_cycle_advanced(&env, 1, 0, 1, true, false, 1234567890);
+    }
+
+    #[test]
     fn test_group_paused_event() {
         let env = Env::default();
         let creator = Address::generate(&env);
@@ -1211,5 +1378,155 @@ mod tests {
         let creator = Address::generate(&env);
 
         EventEmitter::emit_group_unpaused(&env, 1, creator, 1234567890);
+    }
+
+    // Issue #73: Verify ContractUpgraded event type and emit helper are centralised
+    #[test]
+    fn test_contract_upgraded_event() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+
+        let event = ContractUpgraded {
+            upgraded_by: admin.clone(),
+            old_version: 1,
+            new_version: 2,
+            upgraded_at: 1234567890,
+        };
+
+        assert_eq!(event.old_version, 1);
+        assert_eq!(event.new_version, 2);
+        assert_eq!(event.upgraded_by, admin);
+    }
+
+    #[test]
+    fn test_event_emitter_contract_upgraded() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+
+        // Should not panic — verifies the emit helper is wired correctly
+        EventEmitter::emit_contract_upgraded(&env, admin, 1, 2, 1234567890);
+    }
+
+    // ── Drift-detection: events.rs ↔ packages/events-schema/schema.json (issue #1715) ───────
+    //
+    // Both files are embedded at compile time and compared in both directions,
+    // so adding an emitter without a schema entry (or vice versa) fails
+    // `cargo test`. The schema.json ↔ generated/events.ts half is covered by
+    // `.github/workflows/event-schema-drift.yml`.
+    //
+    // HOW TO ADD AN EVENT:
+    // 1. Add the emit_* method to EventEmitter.
+    // 2. Add the event definition to packages/events-schema/schema.json.
+    // 3. Run `node packages/events-schema/codegen.js` to regenerate TypeScript types.
+
+    const SCHEMA_JSON: &str = include_str!("../../../packages/events-schema/schema.json");
+    const EVENTS_RS: &str = include_str!("events.rs");
+
+    /// Non-test part of this file (the test module mentions topics in strings).
+    fn emitter_source() -> &'static str {
+        let marker = concat!("#[cfg(test)]\n", "mod tests {");
+        &EVENTS_RS[..EVENTS_RS.find(marker).expect("test module marker")]
+    }
+
+    /// Calls `f` with every `"topic": "<name>"` value in schema.json.
+    fn for_each_schema_topic(mut f: impl FnMut(&str)) {
+        let needle = "\"topic\": \"";
+        let mut rest = SCHEMA_JSON;
+        while let Some(i) = rest.find(needle) {
+            rest = &rest[i + needle.len()..];
+            let end = rest.find('"').unwrap();
+            f(&rest[..end]);
+        }
+    }
+
+    /// Calls `f` with the topic of every `publish(("<name>",), ..)` in events.rs.
+    fn for_each_emitted_topic(mut f: impl FnMut(&str)) {
+        let mut rest = emitter_source();
+        while let Some(i) = rest.find("publish(") {
+            rest = rest[i + "publish(".len()..].trim_start();
+            if let Some(tail) = rest.strip_prefix("(\"") {
+                let end = tail.find('"').unwrap();
+                f(&tail[..end]);
+            }
+        }
+    }
+
+    fn schema_has_topic(topic: &str) -> bool {
+        let mut found = false;
+        for_each_schema_topic(|t| found |= t == topic);
+        found
+    }
+
+    fn emitter_has_topic(topic: &str) -> bool {
+        let mut found = false;
+        for_each_emitted_topic(|t| found |= t == topic);
+        found
+    }
+
+    #[test]
+    fn test_every_emitted_topic_is_in_schema() {
+        let mut count = 0;
+        for_each_emitted_topic(|t| {
+            count += 1;
+            assert!(
+                schema_has_topic(t),
+                "topic '{}' is emitted by events.rs but missing from schema.json",
+                t
+            );
+        });
+        assert!(count > 0, "drift check found no emitted topics");
+    }
+
+    #[test]
+    fn test_every_schema_topic_is_emitted() {
+        let mut count = 0;
+        for_each_schema_topic(|t| {
+            count += 1;
+            assert!(
+                emitter_has_topic(t),
+                "topic '{}' is in schema.json but has no emitter in events.rs",
+                t
+            );
+        });
+        assert!(count > 0, "drift check found no schema topics");
+    }
+
+    #[test]
+    fn test_schema_topics_are_unique() {
+        for_each_schema_topic(|t| {
+            let mut n = 0;
+            for_each_schema_topic(|u| n += (u == t) as u32);
+            assert_eq!(n, 1, "duplicate topic '{}' in schema.json", t);
+        });
+    }
+
+    // Smoke-tests for emit helpers covered by the schema (issue #1715):
+
+    #[test]
+    fn test_emit_contribution_missed() {
+        let env = Env::default();
+        let member = Address::generate(&env);
+        // Must not panic — verifies the emit helper exists and is wired correctly
+        EventEmitter::emit_contribution_missed(&env, 1, member, 2, 500_000, 1234567890);
+    }
+
+    #[test]
+    fn test_emit_group_dissolved() {
+        let env = Env::default();
+        EventEmitter::emit_group_dissolved(&env, 1, 1234567890, 50_000_000);
+    }
+
+    #[test]
+    fn test_emit_group_cloned() {
+        let env = Env::default();
+        let creator = Address::generate(&env);
+        EventEmitter::emit_group_cloned(&env, 1, 2, creator, 1234567890);
+    }
+
+    #[test]
+    fn test_emit_cycle_deadline_extended() {
+        let env = Env::default();
+        let caller = Address::generate(&env);
+        EventEmitter::emit_cycle_deadline_extended(&env, 1, 3, 86_400, 9999999, caller, 1234567890);
     }
 }

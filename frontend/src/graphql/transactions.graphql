@@ -1,0 +1,19 @@
+# Fragments
+
+fragment TransactionFields on Transaction {
+  id
+  groupId
+  memberAddress
+  amount
+  type
+  timestamp
+  stellarTxHash
+}
+
+# Queries
+
+query GetTransactions($groupId: ID) {
+  transactions(groupId: $groupId) {
+    ...TransactionFields
+  }
+}

@@ -1,8 +1,21 @@
-import HomePage from "./pages/HomePage";
-import "./App.css";
+import { lazy, Suspense } from 'react';
 
-function App() {
-  return <HomePage />;
+import './App.css';
+import { AppProviders } from './context/AppProviders';
+import { useDeepLink } from './hooks/useDeepLink';
+import { RouteLoadingFallback } from './routing/RouteLoadingFallback';
+
+const AppRouter = lazy(() => import('./routing/AppRouter').then((m) => ({ default: m.AppRouter })));
+
+export default function App() {
+  // Initialize deep link handler
+  useDeepLink();
+
+  return (
+    <AppProviders>
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <AppRouter />
+      </Suspense>
+    </AppProviders>
+  );
 }
-
-export default App;

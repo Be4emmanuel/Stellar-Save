@@ -1,3 +1,4 @@
+use crate::auth::is_active_member;
 use crate::error::StellarSaveError;
 use crate::storage::StorageKeyBuilder;
 use soroban_sdk::{contracttype, Address, Env, Vec};
@@ -120,8 +121,7 @@ pub fn get_member_milestones(
         .ok_or(StellarSaveError::GroupNotFound)?;
 
     // Verify member belongs to the group
-    let member_key = StorageKeyBuilder::member_profile(group_id, member.clone());
-    if !env.storage().persistent().has(&member_key) {
+    if !is_active_member(env, group_id, &member) {
         return Err(StellarSaveError::NotMember);
     }
 

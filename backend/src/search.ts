@@ -1,21 +1,39 @@
 import { Client } from '@elastic/elasticsearch';
-import { Group, Member, Transaction } from './models';
-import dotenv from 'dotenv';
 
-dotenv.config();
+import { config } from './config';
+import { logger } from './logger';
+
+import type { Group, Member, Transaction } from './models';
+
+/**
+ * Search service backed by Elasticsearch.
+ *
+ * Refactored for dependency injection (Issue #1701):
+ * - Elasticsearch Client, config, and logger are injected via constructor
+ * - Tests can pass a lightweight mock client instead of hitting a real ES cluster
+ */
+
+export interface SearchServiceDeps {
+  client?: Client;
+  config?: { elasticsearch: { node: string; username: string; password: string } };
+  logger?: { info: (...a: unknown[]) => void; error: (...a: unknown[]) => void; debug: (...a: unknown[]) => void };
+}
 
 export class SearchService {
   private client: Client;
   private isConnected: boolean = false;
+  private readonly log: NonNullable<SearchServiceDeps['logger']>;
 
-  constructor() {
-    const node = process.env.ELASTICSEARCH_NODE || 'http://localhost:9200';
-    this.client = new Client({
-      node,
+  constructor(deps?: SearchServiceDeps) {
+    const resolvedConfig = deps?.config ?? config;
+    this.log = deps?.logger ?? logger;
+
+    this.client = deps?.client ?? new Client({
+      node: resolvedConfig.elasticsearch.node,
       auth: {
-        username: process.env.ELASTICSEARCH_USERNAME || 'elastic',
-        password: process.env.ELASTICSEARCH_PASSWORD || 'changeme'
-      }
+        username: resolvedConfig.elasticsearch.username,
+        password: resolvedConfig.elasticsearch.password,
+      },
     });
   }
 
@@ -23,10 +41,10 @@ export class SearchService {
     try {
       await this.client.ping();
       this.isConnected = true;
-      console.log('Connected to Elasticsearch');
+      this.log.info('Connected to Elasticsearch');
       await this.createIndices();
     } catch (error) {
-      console.error('Elasticsearch connection failed:', error);
+      this.log.error('Elasticsearch connection failed:', error);
       this.isConnected = false;
     }
   }

@@ -1,7 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe, it, expect, vi } from 'vitest';
+
 import { TransactionConfirmModal } from '../components/TransactionConfirmModal';
+
 import type { TransactionDetails } from '../components/TransactionConfirmModal';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -33,7 +35,7 @@ function renderModal(
     onClose: () => void;
     onSuccess: (hash: string) => void;
     onError: (err: Error) => void;
-  }> = {},
+  }> = {}
 ) {
   const defaults = {
     open: true,

@@ -1,6 +1,13 @@
-import type { FilterState, SortOption } from '../components/GroupFilters';
+// Re-export shared primitives from the canonical SDK package so there is a
+// single source of truth for these types across frontend, backend, and mobile.
+//
+// NOTE: The GraphQL API uses separate Group / Member types — see the generated
+// types in `src/generated/graphql.ts` (Group, Member, GetGroupQuery, etc.).
+// The types below are the REST API / UI-layer shapes used by the frontend.
+export type { GroupStatus, PaginationMeta } from '@stellar-save/sdk';
 
-export type GroupStatus = 'active' | 'completed' | 'pending';
+import type { FilterState, SortOption } from '../components/GroupFilters';
+import type { GroupStatus, PaginationMeta } from '@stellar-save/sdk';
 
 export interface PublicGroup {
   id: string;
@@ -21,15 +28,6 @@ export interface PublicGroup {
 export interface PaginationState {
   page: number;
   pageSize: number;
-}
-
-export interface PaginationMeta {
-  page: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
 }
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
@@ -75,18 +73,9 @@ export interface GroupDetail extends PublicGroup {
   startedAt: Date | null;
 }
 
-// ─── useGroup return type ─────────────────────────────────────────────────────
-
-export interface UseGroupReturn {
-  /** Full group detail, null while loading or on error */
-  group: GroupDetail | null;
-  /** True during the initial fetch or a manual refresh */
-  isLoading: boolean;
-  /** Error message, null when no error */
-  error: string | null;
-  /** Manually re-fetch (busts cache) */
-  refresh: () => void;
-}
+// Note: the `useGroup()` hook's return type (`UseGroupReturn`) lives in
+// `hooks/useGroup.ts` since it wraps `DetailedGroup` (members/contributions/
+// cycles) from `utils/groupApi`, not the lighter-weight `GroupDetail` above.
 
 // ─── Hook return type ─────────────────────────────────────────────────────────
 
@@ -105,6 +94,10 @@ export interface UseGroupsReturn {
   error: string | null;
   /** Whether any non-default filter is active */
   hasActiveFilters: boolean;
+  /** Whether the data is from cache and potentially stale */
+  isStale?: boolean;
+  /** Whether the data is being served from offline cache */
+  fromCache?: boolean;
   /** Update one or more filter fields; resets to page 1 */
   setFilters: (patch: Partial<GroupFilters>) => void;
   /** Reset all filters to defaults */
