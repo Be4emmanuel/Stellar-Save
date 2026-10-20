@@ -10,6 +10,59 @@ This project uses a comprehensive testing strategy including:
 
 ---
 
+## Mutation Testing (`contracts/stellar-save/src/mutation_tests.rs`)
+
+`mutation_tests.rs` exists for one reason: to **kill mutants** produced by
+`cargo-mutants`. It is not a general-purpose test file — every test in it should
+fail when a specific, targeted mutation is introduced into the contract source.
+Tests that merely re-assert behaviour already covered by the property tests in
+`src/test.rs` are duplicates and should be removed rather than kept.
+
+### Running the mutation tool
+
+```bash
+# Install once (pinned tool version recommended)
+cargo install cargo-mutants --locked
+
+# Run mutation testing against the stellar-save contract only
+cd contracts/stellar-save
+cargo mutants --file src/lib.rs --file src/mutation_tests.rs
+
+# Emit a machine-readable survivor list for review
+cargo mutants --json --output mutants.json
+```
+
+`cargo mutants` recompiles the crate once per mutant and runs the test suite;
+this is slow by design. Scope it with `--file` / `--in-place` while iterating.
+
+### Recording results
+
+After each run, record the outcome in the PR description (and update this
+section when the baseline changes):
+
+| Field | Value |
+|-------|-------|
+| Tool | `cargo-mutants` |
+| Scope | `contracts/stellar-save/src/lib.rs` |
+| Mutants generated | _fill from run_ |
+| Mutants killed | _fill from run_ |
+| Survivors | _fill from run_ |
+| Kill rate | _killed / generated_ |
+| Expected kill rate | **≥ 90%** |
+
+Survivors are listed in `mutants.out/missed.txt` (or the `--json` output). Each
+survivor must either be killed by a new/kept test in `mutation_tests.rs`, or be
+explicitly justified as equivalent/unreachable in the PR.
+
+### Pruning policy
+
+- **Keep** a test only if removing it lets at least one mutant survive.
+- **Delete** tests whose assertions are already covered by the property tests
+  in `src/test.rs` (they add runtime cost without improving the kill rate).
+- Re-run `cargo mutants` after pruning and confirm the kill rate did not drop.
+
+---
+
 ## Shared Stellar SDK Mock
 
 A shared manual mock for `@stellar/stellar-sdk` eliminates live network calls and
