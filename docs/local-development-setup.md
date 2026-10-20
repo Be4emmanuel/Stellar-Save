@@ -125,6 +125,43 @@ stellar contract deploy \
 
 4. Save the returned contract ID for subsequent invocations.
 
+## Mobile Setup
+
+The mobile app lives in `mobile/` and is an Expo (React Native) project.
+
+```bash
+# Install dependencies
+cd mobile
+npm ci
+
+# Start the Expo dev server
+npm start
+
+# Or target a specific platform directly
+npm run android
+npm run ios
+```
+
+The mobile app talks to the same backend (`http://localhost:3001` by default) and consumes the shared `@stellar-save/sdk` workspace package, so start the backend (Docker or manual setup above) before running the app. Use the Expo Go app or a simulator/emulator to open the project once `npm start` prints a QR code.
+
+Useful checks:
+
+```bash
+npm run lint
+npm run typecheck
+```
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| `docker compose up` hangs on `seed` | Postgres/Redis not healthy yet | Re-run `docker compose up`; the `seed` container waits on healthchecks, so a slow first pull can look stuck |
+| `cargo build --target wasm32-unknown-unknown` fails with "target not installed" | Missing Rust target | Run `rustup target add wasm32-unknown-unknown` (already declared in `rust-toolchain.toml`, but manual Rust installs may need it added explicitly) |
+| `stellar contract deploy` fails with account/funding errors | Testnet deployer account has no funds | Use `stellar keys fund deployer --network testnet` (or Friendbot) before deploying |
+| `npm ci` fails in `backend/` or `frontend/` | Node/npm version mismatch | Confirm `node --version` matches the Node 20.x / npm 10.x prerequisite above |
+| Mobile app can't reach the backend from a physical device | `localhost` doesn't resolve to your dev machine on-device | Point the app at your machine's LAN IP (or use `adb reverse tcp:3001 tcp:3001` for Android emulators) instead of `localhost` |
+| Port already in use (5173, 3001, 8000, 5432, 6379) | A previous `docker compose up` or local process is still running | Run `docker compose down -v`, or stop the conflicting local process, then retry |
+
 ## Hello World Walkthrough
 
 ### 1. Create a group

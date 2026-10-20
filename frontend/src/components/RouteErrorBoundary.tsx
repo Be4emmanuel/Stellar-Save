@@ -1,6 +1,9 @@
-import { ReactNode, Component, ErrorInfo } from 'react';
-import { Card } from './Card';
+import { Component } from 'react';
+
 import { Button } from './Button';
+import { Card } from './Card';
+
+import type { ReactNode, ErrorInfo } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -12,6 +15,10 @@ interface State {
   errorInfo: ErrorInfo | null;
 }
 
+// NOTE: Intentional class component exception (see issue #1265).
+// React has no hooks-based equivalent for `getDerivedStateFromError` /
+// `componentDidCatch`, so error boundaries must be class components.
+// Do not convert this to a function component.
 export class RouteErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -50,12 +57,14 @@ export class RouteErrorBoundary extends Component<Props, State> {
               {this.state.error && (
                 <details style={{ marginTop: '1rem', textAlign: 'left' }}>
                   <summary>Error details</summary>
-                  <pre style={{
-                    backgroundColor: '#f5f5f5',
-                    padding: '1rem',
-                    borderRadius: '4px',
-                    overflow: 'auto',
-                  }}>
+                  <pre
+                    style={{
+                      backgroundColor: '#f5f5f5',
+                      padding: '1rem',
+                      borderRadius: '4px',
+                      overflow: 'auto',
+                    }}
+                  >
                     {this.state.error.toString()}
                     {this.state.errorInfo?.componentStack &&
                       `\n\nComponent Stack:\n${this.state.errorInfo.componentStack}`}
@@ -63,7 +72,14 @@ export class RouteErrorBoundary extends Component<Props, State> {
                 </details>
               )}
 
-              <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <div
+                style={{
+                  marginTop: '2rem',
+                  display: 'flex',
+                  gap: '1rem',
+                  justifyContent: 'center',
+                }}
+              >
                 <Button variant="primary" onClick={this.handleRetry}>
                   Try Again
                 </Button>

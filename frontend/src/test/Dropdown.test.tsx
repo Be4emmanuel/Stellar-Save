@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+
 import { Dropdown } from '../components/Dropdown';
 
 const items = [
@@ -11,13 +12,7 @@ const items = [
 ];
 
 function renderDropdown(props = {}) {
-  return render(
-    <Dropdown
-      trigger={<button>Open Menu</button>}
-      items={items}
-      {...props}
-    />,
-  );
+  return render(<Dropdown trigger={<button>Open Menu</button>} items={items} {...props} />);
 }
 
 describe('Dropdown', () => {
@@ -49,10 +44,7 @@ describe('Dropdown', () => {
   it('calls item onClick when item is clicked', () => {
     const onClick = vi.fn();
     render(
-      <Dropdown
-        trigger={<button>Open</button>}
-        items={[{ id: 'a', label: 'Action', onClick }]}
-      />,
+      <Dropdown trigger={<button>Open</button>} items={[{ id: 'a', label: 'Action', onClick }]} />
     );
     fireEvent.click(screen.getByText('Open'));
     fireEvent.click(screen.getByText('Action'));

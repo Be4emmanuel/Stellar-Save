@@ -1,6 +1,7 @@
+import { formatAmount, formatDate } from '../../utils/format';
 import { Avatar } from '../Avatar';
 import { Badge } from '../Badge';
-import { formatAmount, formatDate } from '../../utils/format';
+
 import type { GroupContribution } from '../../utils/groupApi';
 
 interface ContributionsPanelProps {
@@ -8,7 +9,10 @@ interface ContributionsPanelProps {
   onContributionClick?: (contribution: GroupContribution) => void;
 }
 
-export function ContributionsPanel({ contributions, onContributionClick }: ContributionsPanelProps) {
+export function ContributionsPanel({
+  contributions,
+  onContributionClick,
+}: ContributionsPanelProps) {
   const getStatusVariant = (status: string): 'success' | 'warning' | 'info' | 'danger' => {
     switch (status) {
       case 'completed':

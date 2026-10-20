@@ -27,7 +27,9 @@
  */
 
 import { context, trace, SpanStatusCode, type Span } from '@opentelemetry/api';
+
 import { config } from './config';
+import { logger } from './logger';
 
 const SERVICE_NAME = config.tracing.serviceName;
 
@@ -48,14 +50,15 @@ export function startTracing(): void {
   started = true;
 
   try {
-    /* eslint-disable @typescript-eslint/no-var-requires */
+    // Synchronous `require()` (not a static/dynamic `import`) is deliberate here:
+    // it keeps these heavyweight OTel packages truly optional, loaded only on
+    // this call path when tracing is actually enabled, and must complete before
+    // startTracing() returns so instrumentation patching is in place before the
+    // caller's subsequent requires run (see this function's doc comment).
+    /* eslint-disable @typescript-eslint/no-require-imports */
     const { NodeSDK } = require('@opentelemetry/sdk-node');
-    const {
-      getNodeAutoInstrumentations,
-    } = require('@opentelemetry/auto-instrumentations-node');
-    const {
-      OTLPTraceExporter,
-    } = require('@opentelemetry/exporter-trace-otlp-http');
+    const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
+    const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
     const { resourceFromAttributes } = require('@opentelemetry/resources');
     const {
       ATTR_SERVICE_NAME,
@@ -65,7 +68,7 @@ export function startTracing(): void {
       ParentBasedSampler,
       TraceIdRatioBasedSampler,
     } = require('@opentelemetry/sdk-trace-base');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+    /* eslint-enable @typescript-eslint/no-require-imports */
 
     const ratio = config.tracing.samplerArg;
     const sampler = new ParentBasedSampler({
@@ -74,7 +77,8 @@ export function startTracing(): void {
 
     // OTLP/HTTP exporter. If only a base endpoint is given, the exporter appends
     // the standard /v1/traces path automatically.
-    const endpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || config.tracing.otlpEndpoint + '/v1/traces';
+    const endpoint =
+      process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || config.tracing.otlpEndpoint + '/v1/traces';
     const exporter = new OTLPTraceExporter({ url: endpoint });
 
     const sdk = new NodeSDK({
@@ -93,26 +97,24 @@ export function startTracing(): void {
     });
 
     sdk.start();
-    // eslint-disable-next-line no-console
-    console.log(
+    logger.info(
       `[tracing] OpenTelemetry enabled for "${SERVICE_NAME}" ` +
-        `(sampler ratio=${ratio}, exporter=OTLP/HTTP)`,
+        `(sampler ratio=${ratio}, exporter=OTLP/HTTP)`
     );
 
     const shutdown = () =>
       sdk
         .shutdown()
-        .catch((err: unknown) => console.error('[tracing] shutdown error', err))
+        .catch((err: unknown) => logger.error('[tracing] shutdown error', err))
         .finally(() => process.exit(0));
     process.once('SIGTERM', shutdown);
     process.once('SIGINT', shutdown);
   } catch (err) {
     started = false;
     // Missing optional deps or misconfig must never crash the server.
-    // eslint-disable-next-line no-console
-    console.warn(
+    logger.warn(
       '[tracing] Failed to initialise OpenTelemetry; continuing without tracing.',
-      err instanceof Error ? err.message : err,
+      err instanceof Error ? err.message : err
     );
   }
 }
@@ -134,7 +136,7 @@ export function getTracer() {
 export async function withSpan<T>(
   name: string,
   attrs: Record<string, string | number | boolean>,
-  fn: (span: Span) => Promise<T>,
+  fn: (span: Span) => Promise<T>
 ): Promise<T> {
   const tracer = getTracer();
   return tracer.startActiveSpan(name, { attributes: attrs }, async (span) => {

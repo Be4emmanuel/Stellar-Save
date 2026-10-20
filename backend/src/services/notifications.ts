@@ -5,13 +5,16 @@
  * Integrates with SendGrid for transactional email delivery.
  * Schedules reminders at 48h and 24h before each cycle deadline.
  *
- * Issue #791
+ * Issue #791, #1301
  */
 
 import * as sgMail from '@sendgrid/mail';
-import { prisma } from '../prisma_client';
-import { logger } from '../logger';
+
 import { config } from '../config';
+import { logger } from '../logger';
+import { calculateReminderSchedules } from './reminder_scheduler';
+import { notificationPreferenceRepository } from '../modules/notifications/notification-preference.repository';
+import { prisma } from '../prisma_client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -119,12 +122,6 @@ function formatDeadline(date: Date): string {
 
 /**
  * Send a contribution reminder email to a single member.
- *
- * @param member   - The recipient member (userId, email, name)
- * @param groupId  - The savings group identifier
- * @param deadline - The contribution deadline timestamp
- * @param window   - How far before the deadline this reminder is for ('48h' | '24h')
- * @returns        ReminderResult with delivery status and SendGrid message ID
  */
 export async function sendContributionReminder(
   member: Member,
@@ -136,24 +133,23 @@ export async function sendContributionReminder(
   const fromEmail = config.sendgrid.fromEmail;
   const appUrl = config.urls.app;
 
-  // ── 1. Check user notification preferences ────────────────────────────────
   try {
-    const prefs = await prisma.notificationPreference.findUnique({
-      where: { userId: member.userId },
-    });
+    const prefs = await notificationPreferenceRepository.findByUserId(member.userId);
 
     if (prefs && (!prefs.emailNotifications || !prefs.contributionReminders)) {
       logger.info('Skipping reminder — user opted out', { userId: member.userId, groupId });
-      return { memberId: member.userId, email: member.email, status: 'skipped', reason: 'opted_out' };
+      return {
+        memberId: member.userId,
+        email: member.email,
+        status: 'skipped',
+        reason: 'opted_out',
+      };
     }
 
     const unsubscribeUrl = prefs
       ? `${appUrl}/notifications/unsubscribe/${prefs.unsubscribeToken}`
       : `${appUrl}/notifications/unsubscribe`;
 
-    // ── 2. Fetch group metadata ───────────────────────────────────────────────
-    // Group data lives on-chain; we use a lightweight lookup from indexed events.
-    // Fall back to sensible defaults when the indexer hasn't synced yet.
     const groupEvent = await prisma.contractEvent.findFirst({
       where: { contractId: groupId, eventType: 'group_created' },
       orderBy: { timestamp: 'desc' },
@@ -164,7 +160,6 @@ export async function sendContributionReminder(
     const amount: string = String(groupData.contribution_amount ?? '—');
     const cycleNumber: string = String(groupData.current_cycle ?? '—');
 
-    // ── 3. Build email ────────────────────────────────────────────────────────
     const tpl = REMINDER_TEMPLATES[window];
     const vars: Record<string, string> = {
       memberName: member.name,
@@ -181,10 +176,14 @@ export async function sendContributionReminder(
     const html = renderTemplate(tpl.html, vars);
     const text = renderTemplate(tpl.text, vars);
 
-    // ── 4. Send via SendGrid ──────────────────────────────────────────────────
     if (!apiKey) {
       logger.warn('SENDGRID_API_KEY not set — skipping send', { userId: member.userId });
-      return { memberId: member.userId, email: member.email, status: 'skipped', reason: 'no_api_key' };
+      return {
+        memberId: member.userId,
+        email: member.email,
+        status: 'skipped',
+        reason: 'no_api_key',
+      };
     }
 
     sgMail.setApiKey(apiKey);
@@ -200,7 +199,6 @@ export async function sendContributionReminder(
 
     const messageId: string = (response.headers['x-message-id'] as string) ?? '';
 
-    // ── 5. Persist notification record ───────────────────────────────────────
     await prisma.notification.create({
       data: {
         userId: member.userId,
@@ -216,13 +214,21 @@ export async function sendContributionReminder(
       },
     });
 
-    logger.info('Contribution reminder sent', { userId: member.userId, groupId, window, messageId });
+    logger.info('Contribution reminder sent', {
+      userId: member.userId,
+      groupId,
+      window,
+      messageId,
+    });
     return { memberId: member.userId, email: member.email, status: 'sent', messageId };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    logger.error('Failed to send contribution reminder', { userId: member.userId, groupId, error: reason });
+    logger.error('Failed to send contribution reminder', {
+      userId: member.userId,
+      groupId,
+      error: reason,
+    });
 
-    // Persist failure for observability
     await prisma.notification
       .create({
         data: {
@@ -238,7 +244,7 @@ export async function sendContributionReminder(
         },
       })
       .catch(() => {
-        /* best-effort — don't mask the original error */
+        /* best-effort */
       });
 
     return { memberId: member.userId, email: member.email, status: 'failed', reason };
@@ -249,18 +255,7 @@ export async function sendContributionReminder(
 
 /**
  * Schedule contribution reminders for all members of a group.
- *
- * Enqueues two notifications per member:
- *   • 48 hours before the deadline
- *   • 24 hours before the deadline
- *
- * Uses the existing NotificationQueue model so the queue processor
- * (NotificationService.processQueuedNotifications) handles delivery.
- *
- * @param members  - Array of group members to notify
- * @param groupId  - The savings group identifier
- * @param deadline - The contribution deadline
- * @returns        Array of queued notification IDs
+ * Uses reminder_scheduler module for pure date calculation & timezone handling.
  */
 export async function scheduleContributionReminders(
   members: Member[],
@@ -268,24 +263,24 @@ export async function scheduleContributionReminders(
   deadline: Date
 ): Promise<string[]> {
   const queuedIds: string[] = [];
-  const now = Date.now();
-
-  const windows: { window: ReminderWindow; offsetMs: number }[] = [
-    { window: '48h', offsetMs: 48 * 60 * 60 * 1000 },
-    { window: '24h', offsetMs: 24 * 60 * 60 * 1000 },
-  ];
 
   for (const member of members) {
-    for (const { window, offsetMs } of windows) {
-      const scheduledFor = new Date(deadline.getTime() - offsetMs);
+    // Fetch user preferences if available to pass to pure scheduler
+    const prefsRecord = await notificationPreferenceRepository.findByUserId(member.userId);
 
-      // Skip if the scheduled time is already in the past
-      if (scheduledFor.getTime() <= now) {
-        logger.debug('Skipping past reminder slot', {
+    const slots = calculateReminderSchedules({
+      deadline,
+      preferences: prefsRecord ?? undefined,
+      now: new Date(),
+    });
+
+    for (const slot of slots) {
+      if (slot.isMuted) {
+        logger.debug('Skipping reminder slot', {
           userId: member.userId,
           groupId,
-          window,
-          scheduledFor,
+          window: slot.window,
+          reason: slot.skipReason,
         });
         continue;
       }
@@ -293,18 +288,18 @@ export async function scheduleContributionReminders(
       const queued = await prisma.notificationQueue.create({
         data: {
           userId: member.userId,
-          templateKey: `contribution_reminder_${window}`,
+          templateKey: `contribution_reminder_${slot.window}`,
           recipient: member.email,
           templateData: {
             memberName: member.name,
             memberEmail: member.email,
             groupId,
             deadline: deadline.toISOString(),
-            window,
+            window: slot.window,
           },
           notificationType: 'email',
-          priority: window === '24h' ? 10 : 5, // 24h reminder is higher priority
-          scheduledFor,
+          priority: slot.window === '24h' ? 10 : 5,
+          scheduledFor: slot.scheduledTime,
         },
       });
 
@@ -313,8 +308,8 @@ export async function scheduleContributionReminders(
         queueId: queued.id,
         userId: member.userId,
         groupId,
-        window,
-        scheduledFor,
+        window: slot.window,
+        scheduledFor: slot.scheduledTime,
       });
     }
   }
@@ -324,13 +319,6 @@ export async function scheduleContributionReminders(
 
 /**
  * Process due contribution reminders from the queue.
- *
- * Intended to be called by a cron job (e.g. every 15 minutes).
- * Picks up queued reminders whose scheduledFor time has passed
- * and dispatches them via sendContributionReminder.
- *
- * @param batchSize - Max reminders to process per invocation (default 50)
- * @returns         Number of reminders successfully sent
  */
 export async function processDueReminders(batchSize = 50): Promise<number> {
   const due = await prisma.notificationQueue.findMany({
@@ -347,7 +335,6 @@ export async function processDueReminders(batchSize = 50): Promise<number> {
   let sent = 0;
 
   for (const job of due) {
-    // Mark as processing to prevent double-delivery
     await prisma.notificationQueue.update({
       where: { id: job.id },
       data: { status: 'processing' },

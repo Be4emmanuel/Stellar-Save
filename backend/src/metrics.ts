@@ -1,5 +1,6 @@
 import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
-import { Request, Response, NextFunction } from 'express';
+
+import type { Request, Response, NextFunction } from 'express';
 
 export const registry = new Registry();
 registry.setDefaultLabels({ app: 'stellar-save-backend' });
@@ -111,6 +112,28 @@ export const sorobanRpcCallsTotal = new Counter({
   name: 'soroban_rpc_calls_total',
   help: 'Total Soroban RPC calls made',
   labelNames: ['method', 'status'],
+  registers: [registry],
+});
+
+// ── Circuit breaker metrics (Soroban / Horizon RPC) ───────────────────────────
+export const circuitBreakerState = new Gauge({
+  name: 'circuit_breaker_state',
+  help: 'Circuit breaker state (0=CLOSED, 1=HALF_OPEN, 2=OPEN)',
+  labelNames: ['breaker'],
+  registers: [registry],
+});
+
+export const circuitBreakerTripsTotal = new Counter({
+  name: 'circuit_breaker_trips_total',
+  help: 'Total times a circuit breaker transitioned to OPEN',
+  labelNames: ['breaker'],
+  registers: [registry],
+});
+
+export const circuitBreakerFallbacksTotal = new Counter({
+  name: 'circuit_breaker_fallbacks_total',
+  help: 'Total requests served from a fallback because the circuit was open or the call failed',
+  labelNames: ['breaker', 'outcome'],
   registers: [registry],
 });
 

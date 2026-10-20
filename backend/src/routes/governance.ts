@@ -13,12 +13,16 @@
 
 import { Router } from 'express';
 
+import { AppError } from '../lib/errors';
+
+import type { NextFunction } from 'express';
+
 export type ProposalStatus = 'active' | 'passed' | 'rejected' | 'executed' | 'expired';
 
 export interface Vote {
   voter: string;
-  support: boolean;   // true = for, false = against
-  votedAt: string;    // ISO-8601
+  support: boolean; // true = for, false = against
+  votedAt: string; // ISO-8601
 }
 
 export interface Proposal {
@@ -115,15 +119,15 @@ export function createGovernanceRouter(): Router {
   // GET /api/v1/governance/proposals
   router.get('/proposals', (_req, res) => {
     const list = Array.from(proposals.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     res.json({ proposals: list, total: list.length });
   });
 
   // GET /api/v1/governance/proposals/:id
-  router.get('/proposals/:id', (req, res) => {
+  router.get('/proposals/:id', (req, res, next: NextFunction) => {
     const proposal = proposals.get(req.params['id'] as string);
-    if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
+    if (!proposal) return next(new AppError('PROPOSAL_NOT_FOUND', 'Proposal not found', 404));
     res.json(proposal);
   });
 
@@ -133,7 +137,7 @@ export function createGovernanceRouter(): Router {
   });
 
   // POST /api/v1/governance/proposals  — create (governor only)
-  router.post('/proposals', (req, res) => {
+  router.post('/proposals', (req, res, next: NextFunction) => {
     const { title, description, proposer } = req.body as {
       title?: string;
       description?: string;
@@ -141,10 +145,12 @@ export function createGovernanceRouter(): Router {
     };
 
     if (!title || !description || !proposer) {
-      return res.status(400).json({ error: 'title, description, and proposer are required.' });
+      return next(
+        new AppError('MISSING_FIELDS', 'title, description, and proposer are required.', 400)
+      );
     }
     if (!isGovernor(proposer)) {
-      return res.status(403).json({ error: 'Only governors may create proposals.' });
+      return next(new AppError('NOT_A_GOVERNOR', 'Only governors may create proposals.', 403));
     }
 
     const id = `prop-${Date.now()}`;
@@ -166,29 +172,31 @@ export function createGovernanceRouter(): Router {
   });
 
   // POST /api/v1/governance/proposals/:id/vote  — vote (governor only)
-  router.post('/proposals/:id/vote', (req, res) => {
+  router.post('/proposals/:id/vote', (req, res, next: NextFunction) => {
     const proposal = proposals.get(req.params['id'] as string);
-    if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
+    if (!proposal) return next(new AppError('PROPOSAL_NOT_FOUND', 'Proposal not found', 404));
 
     const { voter, support } = req.body as { voter?: string; support?: boolean };
 
     if (!voter || typeof support !== 'boolean') {
-      return res.status(400).json({ error: 'voter and support (boolean) are required.' });
+      return next(new AppError('MISSING_FIELDS', 'voter and support (boolean) are required.', 400));
     }
     if (!isGovernor(voter)) {
-      return res.status(403).json({ error: 'Only governors may vote.' });
+      return next(new AppError('NOT_A_GOVERNOR', 'Only governors may vote.', 403));
     }
     if (proposal.status !== 'active') {
-      return res.status(400).json({ error: `Voting is closed (status: ${proposal.status}).` });
+      return next(
+        new AppError('VOTING_CLOSED', `Voting is closed (status: ${proposal.status}).`, 400)
+      );
     }
     if (Date.now() > proposal.votingEndsAt) {
       // Auto-expire
       proposal.status = 'expired';
       proposals.set(proposal.id, proposal);
-      return res.status(400).json({ error: 'Voting period has ended.' });
+      return next(new AppError('VOTING_PERIOD_ENDED', 'Voting period has ended.', 400));
     }
     if (proposal.votes.some((v) => v.voter === voter)) {
-      return res.status(409).json({ error: 'You have already voted on this proposal.' });
+      return next(new AppError('ALREADY_VOTED', 'You have already voted on this proposal.', 409));
     }
 
     proposal.votes.push({ voter, support, votedAt: new Date().toISOString() });

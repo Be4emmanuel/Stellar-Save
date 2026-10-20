@@ -3,8 +3,9 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Stack, Typography } from '@mui/material';
 import { AppCard, AppLayout } from '../ui';
 import { GroupList } from '../components/GroupList';
-import { Button } from '../components/Button';
-import { useGroups } from '../hooks/useGroups';
+import { LoadingState } from '../components/LoadingState';
+import { ErrorState } from '../components/ErrorState';
+import { useGroupsQuery } from '../hooks/useGroupsQuery';
 import { StaleDataBanner } from '../components/StaleDataBanner';
 import { ROUTES } from '../routing/constants';
 
@@ -33,7 +34,7 @@ export default function GroupsPage() {
     [setParams],
   );
 
-  const { groups, isLoading, error, refresh, isStale, fromCache } = useGroups({
+  const { groups, isLoading, error, refresh, isStale, fromCache } = useGroupsQuery({
     initialFilters: { search, minAmount, maxAmount },
   });
 
@@ -63,11 +64,10 @@ export default function GroupsPage() {
 
           <StaleDataBanner isStale={isStale} fromCache={fromCache} onRefresh={refresh} />
 
-          {error && (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography color="error">{error}</Typography>
-              <Button variant="secondary" size="small" onClick={refresh}>Retry</Button>
-            </Stack>
+          {isLoading && <LoadingState message="Loading groups…" />}
+
+          {!isLoading && error && (
+            <ErrorState message={error} onRetry={refresh} />
           )}
 
           <GroupList

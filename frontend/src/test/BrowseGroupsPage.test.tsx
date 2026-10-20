@@ -1,22 +1,25 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, vi } from 'vitest';
+
 import BrowseGroupsPage from '../pages/BrowseGroupsPage';
-import { routeConfig } from '../routing/routes';
 import { ROUTES } from '../routing/constants';
+import { routeConfig } from '../routing/routes';
 import { fetchGroups } from '../utils/groupApi';
-import { clearGroupsCache } from '../hooks/useGroups';
+
+import type { PublicGroup } from '../utils/groupApi';
 
 vi.mock('../ui', () => ({
-  AppLayout: ({ children, title, subtitle }: any) => (
+  AppLayout: ({ children, title, subtitle }: { children: React.ReactNode; title?: React.ReactNode; subtitle?: React.ReactNode }) => (
     <div>
       {title && <h1>{title}</h1>}
       {subtitle && <p>{subtitle}</p>}
       {children}
     </div>
   ),
-  AppCard: ({ children }: any) => <div>{children}</div>,
+  AppCard: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('../utils/groupApi', () => ({
@@ -34,24 +37,58 @@ import { makePublicGroup } from './factories';
 
 const mockFetchGroups = vi.mocked(fetchGroups);
 
-const mockGroups = [
-  makePublicGroup({ id: '1', name: 'Alpha Savers', description: 'First group', memberCount: 5, contributionAmount: 100, status: 'active', createdAt: new Date('2024-01-01') }),
-  makePublicGroup({ id: '2', name: 'Beta Circle', description: 'Second group', memberCount: 3, contributionAmount: 50, status: 'pending', createdAt: new Date('2024-02-01') }),
-  makePublicGroup({ id: '3', name: 'Gamma Fund', description: 'Third group', memberCount: 8, contributionAmount: 200, status: 'completed', createdAt: new Date('2024-03-01') }),
+const mockGroups: PublicGroup[] = [
+  {
+    id: '1',
+    name: 'Alpha Savers',
+    description: 'First group',
+    memberCount: 5,
+    contributionAmount: 100,
+    currency: 'XLM',
+    status: 'active',
+    createdAt: new Date('2024-01-01'),
+  },
+  {
+    id: '2',
+    name: 'Beta Circle',
+    description: 'Second group',
+    memberCount: 3,
+    contributionAmount: 50,
+    currency: 'XLM',
+    status: 'pending',
+    createdAt: new Date('2024-02-01'),
+  },
+  {
+    id: '3',
+    name: 'Gamma Fund',
+    description: 'Third group',
+    memberCount: 8,
+    contributionAmount: 200,
+    currency: 'XLM',
+    status: 'completed',
+    createdAt: new Date('2024-03-01'),
+  },
 ];
 
 function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <BrowseGroupsPage />
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <BrowseGroupsPage />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
 describe('BrowseGroupsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    clearGroupsCache();
+    // BrowseGroupsPage persists the active search/filter state to
+    // localStorage (stellar-save:search-preferences) so it survives
+    // navigation. Clear it between tests so one test's search term
+    // doesn't leak into the next test's initial filters.
+    window.localStorage.clear();
     mockFetchGroups.mockResolvedValue(mockGroups);
   });
 
@@ -64,8 +101,10 @@ describe('BrowseGroupsPage', () => {
 
   it("renders with title 'Browse Groups' and subtitle 'Discover recommended groups based on your preferences and activity'", async () => {
     renderPage();
-    expect(screen.getByText('Browse Groups')).toBeInTheDocument();
-    expect(screen.getByText('Discover recommended groups based on your preferences and activity')).toBeInTheDocument();
+    expect(screen.getAllByText('Browse Groups').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText('Discover recommended groups based on your preferences and activity')
+    ).toBeInTheDocument();
   });
 
   it('calls fetchGroups once on mount', async () => {
@@ -166,13 +205,16 @@ describe('BrowseGroupsPage', () => {
 
   it('loads more recommendations when the sentinel intersects', async () => {
     const observers: IntersectionObserverCallback[] = [];
-    vi.stubGlobal('IntersectionObserver', vi.fn((callback) => {
-      observers.push(callback);
-      return {
-        observe: () => undefined,
-        disconnect: () => undefined,
-      } as unknown as IntersectionObserver;
-    }));
+    vi.stubGlobal(
+      'IntersectionObserver',
+      vi.fn((callback: IntersectionObserverCallback) => {
+        observers.push(callback);
+        return {
+          observe: () => undefined,
+          disconnect: () => undefined,
+        } as unknown as IntersectionObserver;
+      })
+    );
 
     const manyGroups: PublicGroup[] = Array.from({ length: 12 }, (_, index) => ({
       id: `${index + 1}`,
@@ -188,16 +230,29 @@ describe('BrowseGroupsPage', () => {
     mockFetchGroups.mockResolvedValue(manyGroups);
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Group 1')).toBeInTheDocument());
+    // The discovery feed ranks by recommendation score (higher memberCount
+    // scores higher), so with initialPageSize: 6 the first item shown is
+    // "Group 12" (memberCount 12), not "Group 1".
+    await waitFor(() => expect(screen.getByText('Group 12')).toBeInTheDocument(), {
+      timeout: 3000,
+    });
     expect(observers).toHaveLength(1);
+    expect(screen.queryByText('Group 1')).not.toBeInTheDocument();
 
     act(() => {
-      observers[0]([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+      observers[0](
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Group 12')).toBeInTheDocument();
-    });
+    // After loadMore, all 12 (including the lowest-ranked "Group 1") are visible.
+    await waitFor(
+      () => {
+        expect(screen.getByText('Group 1')).toBeInTheDocument();
+      },
+      { timeout: 3000 }
+    );
   });
 
   it('aria-live region is present in the DOM', () => {
@@ -207,7 +262,7 @@ describe('BrowseGroupsPage', () => {
   });
 
   it('route config contains GROUPS_BROWSE entry', () => {
-    const entry = routeConfig.find(r => r.path === ROUTES.GROUPS_BROWSE);
+    const entry = routeConfig.find((r) => r.path === ROUTES.GROUPS_BROWSE);
     expect(entry).toBeDefined();
     expect(entry?.path).toBe('/groups/browse');
   });

@@ -66,6 +66,8 @@ ContractConfig
 
 ## Migration implications
 
+For the storage-version mechanism, migration triggers, and rollback procedure, see [Storage schema versioning](upgrade-guide.md#storage-schema-versioning) in the upgrade guide — this section only covers the v4.0-specific backfill considerations.
+
 Each addition has an operational migration impact:
 
 - Escrow fields should be initialized for existing groups to preserve compatibility with any historical escrow state.

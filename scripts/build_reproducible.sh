@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # build_reproducible.sh — Produce a bit-for-bit reproducible WASM build.
 #
-# Uses the official stellar/stellar-build-tools Docker image which pins:
+# Uses a pinned rust Docker image which controls:
 #   - Rust toolchain version
-#   - LLVM / wasm-opt version
-#   - Build flags (SOURCE_DATE_EPOCH, etc.)
+#   - Build flags (SOURCE_DATE_EPOCH, CARGO_INCREMENTAL, etc.)
 #
 # Usage:
-#   ./scripts/build_reproducible.sh              # build only
+#   ./scripts/build_reproducible.sh              # build only (writes checksum)
 #   ./scripts/build_reproducible.sh --verify     # build and verify against checksum file
 set -euo pipefail
 
@@ -17,12 +16,18 @@ WASM_OUT="target/wasm32-unknown-unknown/release/stellar_save.wasm"
 CHECKSUM_FILE="$CONTRACT_DIR/stellar_save.wasm.sha256"
 
 # Pin the exact Rust toolchain from rust-toolchain.toml so the Docker build
-# uses the same version.
-RUST_VERSION=$(grep 'channel' "$REPO_ROOT/rust-toolchain.toml" | sed 's/.*"\(.*\)".*/\1/')
+# uses the same version.  Map "stable" → "latest" for the Docker image tag
+# (docker.io/library/rust:stable does not exist; use rust:latest instead).
+RAW_CHANNEL=$(grep 'channel' "$REPO_ROOT/rust-toolchain.toml" | sed 's/.*"\(.*\)".*/\1/')
+if [[ "$RAW_CHANNEL" == "stable" ]]; then
+  DOCKER_TAG="latest"
+else
+  DOCKER_TAG="$RAW_CHANNEL"
+fi
 
 echo "==> Reproducible WASM build"
-echo "    Rust channel : $RUST_VERSION"
-echo "    Contract     : $CONTRACT_DIR"
+echo "    rust-toolchain channel : $RAW_CHANNEL  (Docker image: rust:$DOCKER_TAG)"
+echo "    Contract               : $CONTRACT_DIR"
 
 # Ensure Docker is available
 if ! command -v docker &>/dev/null; then
@@ -31,22 +36,57 @@ if ! command -v docker &>/dev/null; then
 fi
 
 # Build inside a clean, pinned container.
+# The workspace root Cargo.toml includes sibling contracts that may have broken
+# dependencies, so we build stellar-save in isolation using a temporary workspace.
 # SOURCE_DATE_EPOCH=0 and CARGO_INCREMENTAL=0 are the two main knobs for
-# reproducibility; the rest strips non-deterministic metadata from the binary.
+# reproducibility.
 docker run --rm \
-  -v "$REPO_ROOT:/workspace" \
-  -w /workspace \
+  -v "$REPO_ROOT/contracts/stellar-save:/stellar-save-src:ro" \
+  -v "$REPO_ROOT/target:/build-out" \
   -e SOURCE_DATE_EPOCH=0 \
   -e CARGO_INCREMENTAL=0 \
-  -e RUSTFLAGS="-C metadata=00000000 -C extra-filename=" \
-  "rust:$RUST_VERSION" \
+  "rust:$DOCKER_TAG" \
   bash -c "
     set -euo pipefail
     rustup target add wasm32-unknown-unknown
+
+    # Build stellar-save in an isolated workspace to avoid broken sibling contracts
+    mkdir -p /build
+    cp -r /stellar-save-src/. /build/stellar-save/
+
+    cat > /build/Cargo.toml << 'TOML'
+[workspace]
+resolver = \"2\"
+members = [\"stellar-save\"]
+
+[workspace.package]
+version = \"0.1.0\"
+edition = \"2021\"
+license = \"MIT\"
+repository = \"https://github.com/Xoulomon/Stellar-Save\"
+
+[workspace.dependencies]
+soroban-sdk = \"23.0.3\"
+
+[profile.release]
+opt-level = \"z\"
+overflow-checks = true
+debug = 0
+strip = \"symbols\"
+debug-assertions = false
+panic = \"abort\"
+codegen-units = 1
+lto = true
+TOML
+
+    cd /build
     cargo build \
-      --manifest-path $CONTRACT_DIR/Cargo.toml \
       --target wasm32-unknown-unknown \
       --release
+
+    mkdir -p /build-out/wasm32-unknown-unknown/release
+    cp /build/target/wasm32-unknown-unknown/release/stellar_save.wasm \
+       /build-out/wasm32-unknown-unknown/release/stellar_save.wasm
   "
 
 echo "==> Build complete: $WASM_OUT"

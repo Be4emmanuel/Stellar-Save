@@ -1,12 +1,31 @@
 import { RecommendationEngine } from '../recommendation';
-import { Group, UserInteraction, UserPreference } from '../models';
+
+import type { Group, UserInteraction} from '../models';
 
 async function runTests() {
   console.log('🧪 Running Recommendation Engine Tests...');
 
   const mockGroups: Group[] = [
-    { id: '1', name: 'Weekly Savers', contributionAmount: 100, cycleDuration: 604800, maxMembers: 10, currentMembers: 5, status: 'Active', tags: ['weekly'] },
-    { id: '2', name: 'Monthly Builders', contributionAmount: 1000, cycleDuration: 2592000, maxMembers: 12, currentMembers: 3, status: 'Active', tags: ['monthly'] },
+    {
+      id: '1',
+      name: 'Weekly Savers',
+      contributionAmount: 100,
+      cycleDuration: 604800,
+      maxMembers: 10,
+      currentMembers: 5,
+      status: 'Active',
+      tags: ['weekly'],
+    },
+    {
+      id: '2',
+      name: 'Monthly Builders',
+      contributionAmount: 1000,
+      cycleDuration: 2592000,
+      maxMembers: 12,
+      currentMembers: 3,
+      status: 'Active',
+      tags: ['monthly'],
+    },
   ];
 
   const mockInteractions: UserInteraction[] = [
@@ -24,7 +43,7 @@ async function runTests() {
     minContribution: 500,
     maxContribution: 1500,
     preferredDuration: 2592000,
-    tags: ['monthly']
+    tags: ['monthly'],
   });
 
   const contentRecs = engine.getRecommendations('user1', 'content');
@@ -37,7 +56,7 @@ async function runTests() {
 
   // Test Collaborative filtering
   console.log('Testing collaborative filtering...');
-  // user1 joined group 1. user2 joined group 1 and 2. 
+  // user1 joined group 1. user2 joined group 1 and 2.
   // user1 and user2 are similar (both joined 1).
   // user1 should be recommended group 2.
   const collabRecs = engine.getRecommendations('user1', 'collaborative');
@@ -51,7 +70,7 @@ async function runTests() {
   console.log('ALL TESTS PASSED! 🎉');
 }
 
-runTests().catch(err => {
+runTests().catch((err) => {
   console.error(err);
   process.exit(1);
 });

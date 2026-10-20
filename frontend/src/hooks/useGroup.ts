@@ -1,26 +1,44 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchGroup } from '../utils/groupApi';
-import { queryKeys } from '../lib/queryKeys';
+
 import { STALE_TIME } from '../lib/queryClient';
-import type { GroupDetail, UseGroupReturn } from '../types/group';
+import { queryKeys } from '../lib/queryKeys';
+import { fetchGroup } from '../utils/groupApi';
+
+import type { DetailedGroup } from '../utils/groupApi';
+
+export interface UseGroupReturn {
+  /** Full group detail, null while loading or on error */
+  group: DetailedGroup | null;
+  /** True during the initial fetch or a manual refresh */
+  isLoading: boolean;
+  /** Error message, null when no error */
+  error: string | null;
+  /** Manually re-fetch (busts cache) */
+  refresh: () => void;
+}
 
 /**
- * Fetches a single group by ID.
+ * Fetches a single group by ID — the single source of truth for group
+ * detail data. Shares the React Query cache with `useGroups()` via the
+ * `queryKeys.groups` factory, so components rendering the same group
+ * (e.g. GroupDetailPage + GroupCard hover-prefetch) reuse one cache entry
+ * instead of issuing redundant network calls.
  *
  * staleTime: 30_000 — group state (member count, status, config) changes
  * infrequently, so we avoid redundant RPC calls for 30 seconds.
  */
-export function useGroup(
-  groupId: string | null | undefined,
-): UseGroupReturn {
+export function useGroup(groupId: string | null | undefined): UseGroupReturn {
   const queryClient = useQueryClient();
 
-  const { data: group = null, isLoading, error, refetch } = useQuery<GroupDetail | null, Error>({
+  const {
+    data: group = null,
+    isLoading,
+    error,
+  } = useQuery<DetailedGroup | null, Error>({
     queryKey: queryKeys.groups.detail(groupId ?? ''),
     queryFn: () => fetchGroup(groupId!),
     enabled: Boolean(groupId),
     staleTime: STALE_TIME.GROUP_STATE,
-    select: (data) => data ?? null,
   });
 
   const refresh = () => {
@@ -47,9 +65,4 @@ export function usePrefetchGroup() {
       staleTime: STALE_TIME.GROUP_STATE,
     });
   };
-}
-
-// Keep backward-compat export for tests
-export function clearGroupCache() {
-  // no-op — React Query manages its own cache
 }

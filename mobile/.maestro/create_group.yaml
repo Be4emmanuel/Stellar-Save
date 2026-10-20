@@ -69,16 +69,23 @@ appId: com.stellarsave.app
 - tapOn:
     id: "confirm-transaction-button"
 
-# Step 12: Success state
-- assertVisible:
-    id: "group-created-success"
+# Step 12: Wait for blockchain confirmation before asserting success.
+# extendedWaitUntil polls until the element is visible (up to 30 s),
+# preventing a race between the tx broadcast and the UI update.
+- extendedWaitUntil:
+    visible:
+      id: "group-created-success"
+    timeout: 30000
 - assertVisible:
     text: "Group Created!"
 
 # Step 13: Navigate to the new group detail page
 - tapOn:
     id: "view-group-button"
-- assertVisible:
-    id: "group-detail-screen"
+# Wait for navigation animation to settle before asserting screen content.
+- extendedWaitUntil:
+    visible:
+      id: "group-detail-screen"
+    timeout: 10000
 - assertVisible:
     text: "Lagos Ajo Circle"

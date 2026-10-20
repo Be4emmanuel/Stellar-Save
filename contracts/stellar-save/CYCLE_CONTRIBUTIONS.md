@@ -163,13 +163,18 @@ Each record in the returned vector contains:
 
 ```rust
 pub struct ContributionRecord {
-    pub member_address: Address,  // Member who made the contribution
+    pub member_address: Address,  // Member who made the contribution (canonical field name)
     pub group_id: u64,             // Group ID
     pub cycle_number: u32,         // Cycle when contributed (0-indexed)
     pub amount: i128,              // Amount in stroops
     pub timestamp: u64,            // Unix timestamp in seconds
 }
 ```
+
+> **Field name note:** The member field is named `member_address` (not `member`). Several test
+> files historically accessed `record.member` which is incorrect. This was fixed in
+> `upgrade_tests.rs`, `migration_matrix_tests.rs`, and `migration_tests.rs` as part of the
+> struct/doc alignment cleanup (issue: struct-cleanup). Always use `record.member_address`.
 
 ## Test Coverage
 
@@ -406,3 +411,31 @@ The `get_cycle_contributions` function provides a robust way to retrieve all con
 - Flexible querying options
 - Full test coverage
 - Clear documentation
+
+## Known Technical Debt
+
+### Redundant Group State Fields: `is_active` and `status`
+
+The `Group` struct currently contains **both** `is_active: bool` and `status: GroupStatus`. The
+`status` field was introduced to replace `is_active` for more explicit state management (the
+`GroupStatus` comment states: *"Replaces is_active for more explicit state management"*). However,
+`is_active` was not removed and remains actively used at ~31 call sites across the codebase
+(`contract.rs`, `payout_executor.rs`, `cycle_advancement.rs`, `deadline.rs`, etc.).
+
+**Impact on this feature:** `get_cycle_contributions` itself does not read `is_active` or `status`
+directly — it only validates that the group exists and queries contributions. However, callers that
+check group liveness before calling this function may use either field inconsistently.
+
+**Why it cannot be removed without a migration:** Removing `is_active` from the serialised `Group`
+struct would change the XDR encoding and break deserialization of all on-chain group records. A
+V3 storage migration would be required to drop the field from the on-chain layout.
+
+**Recommended resolution:**
+1. Keep both fields synchronized in all write paths (ensure `is_active` mirrors
+   `status == Active`) — enforce this with an invariant check helper.
+2. Create a V3 migration that rewrites all `Group` records without `is_active` once the field is
+   removed from the struct.
+3. Add a deprecation comment on `is_active` so no new code writes to it independently of `status`.
+
+**Tracking:** This debt is documented here so it is not lost. A separate issue should be opened to
+plan the V3 migration and complete the removal of `is_active`.

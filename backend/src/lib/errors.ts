@@ -6,6 +6,21 @@ export interface ErrorEnvelope {
   timestamp: string;
 }
 
+/**
+ * Standard application error hierarchy.
+ *
+ * Services should throw a subclass of `AppError` instead of raw `Error`s or
+ * returned error objects. Each subclass carries a stable `code` and the HTTP
+ * `statusCode` it maps to; `errorMiddleware` and `auth_middleware` use these
+ * to build responses.
+ *
+ *   ValidationError   400  VALIDATION_ERROR
+ *   UnauthorizedError 401  UNAUTHORIZED   (alias: AuthError)
+ *   ForbiddenError    403  FORBIDDEN
+ *   NotFoundError     404  NOT_FOUND
+ *   ConflictError     409  CONFLICT
+ *   CircuitBreakerOpenError 503 CIRCUIT_OPEN
+ */
 export class AppError extends Error {
   constructor(
     public readonly code: string,
@@ -16,6 +31,63 @@ export class AppError extends Error {
     super(message);
     this.name = 'AppError';
   }
+}
+
+export class NotFoundError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super('NOT_FOUND', message, 404, details);
+    this.name = 'NotFoundError';
+  }
+}
+
+export class ValidationError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super('VALIDATION_ERROR', message, 400, details);
+    this.name = 'ValidationError';
+  }
+}
+
+export class UnauthorizedError extends AppError {
+  constructor(message: string = 'Unauthorized', details?: unknown) {
+    super('UNAUTHORIZED', message, 401, details);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message: string = 'Forbidden', details?: unknown) {
+    super('FORBIDDEN', message, 403, details);
+    this.name = 'ForbiddenError';
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super('CONFLICT', message, 409, details);
+    this.name = 'ConflictError';
+  }
+}
+
+export class CircuitBreakerOpenError extends AppError {
+  constructor(message: string = 'Circuit breaker is OPEN') {
+    super('CIRCUIT_OPEN', message, 503, undefined);
+    this.name = 'CircuitBreakerOpenError';
+  }
+}
+
+export class ImageValidationError extends AppError {
+  constructor(message: string) {
+    super('IMAGE_VALIDATION_ERROR', message, 400, undefined);
+    this.name = 'ImageValidationError';
+  }
+}
+
+export { AppError as ApiError };
+export { UnauthorizedError as AuthError };
+
+/** HTTP status code for any thrown value (500 for non-AppError). */
+export function statusCodeOf(err: unknown): number {
+  return err instanceof AppError ? err.statusCode : 500;
 }
 
 export function toEnvelope(err: unknown, correlationId: string): ErrorEnvelope {

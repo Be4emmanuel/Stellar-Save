@@ -1,5 +1,11 @@
+import {
+  scanForDevices,
+  connectToDevice,
+  fetchAccounts,
+  signWithHardwareWallet,
+} from './hardwareService';
+
 import type { HardwareDeviceInfo, HardwareAccount, TxApprovalRequest } from './types';
-import { scanForDevices, connectToDevice, fetchAccounts, signWithHardwareWallet } from './hardwareService';
 
 export class LedgerAdapter {
   readonly type = 'ledger' as const;
@@ -19,7 +25,7 @@ export class LedgerAdapter {
   async signTransaction(
     request: TxApprovalRequest,
     device: HardwareDeviceInfo,
-    onStatusChange?: (status: string) => void,
+    onStatusChange?: (status: string) => void
   ): Promise<string> {
     return signWithHardwareWallet(request, device, onStatusChange);
   }
@@ -27,7 +33,7 @@ export class LedgerAdapter {
   getStellarAppDescriptor() {
     return {
       name: 'Stellar',
-      cla: 0xE0,
+      cla: 0xe0,
       apduPrefix: 'E0',
       requiredVersion: '4.0.0',
     };

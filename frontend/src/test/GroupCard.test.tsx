@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+
 import { GroupCard } from '../components/GroupCard';
 import { fetchGroup } from '../utils/groupApi';
 import { makeGroup } from './factories';
@@ -204,10 +205,7 @@ describe('GroupCard — fetch mode', () => {
 
   it('shows loading skeleton while fetching', () => {
     (fetchGroup as Mock).mockReturnValue(new Promise(() => {}));
-    const { container } = render(
-      <GroupCard groupId="group-42" />,
-      { wrapper },
-    );
+    const { container } = render(<GroupCard groupId="group-42" />, { wrapper });
     const skeletonDivs = container.querySelectorAll('.MuiSkeleton-root');
     expect(skeletonDivs.length).toBeGreaterThan(0);
   });
@@ -244,10 +242,9 @@ describe('GroupCard — fetch mode', () => {
 
   it('passes className in fetch mode', async () => {
     (fetchGroup as Mock).mockResolvedValue(MOCK_FETCHED_GROUP);
-    const { container } = render(
-      <GroupCard groupId="group-42" className="custom-klass" />,
-      { wrapper },
-    );
+    const { container } = render(<GroupCard groupId="group-42" className="custom-klass" />, {
+      wrapper,
+    });
     await waitFor(() => {
       expect(screen.getByText('Fetched Circle')).toBeInTheDocument();
     });

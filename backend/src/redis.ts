@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+
 import { config } from './config';
 
 const redis = new Redis({
@@ -10,8 +11,12 @@ const redis = new Redis({
 let hits = 0;
 let misses = 0;
 
-export const recordHit = () => { hits++; };
-export const recordMiss = () => { misses++; };
+export const recordHit = () => {
+  hits++;
+};
+export const recordMiss = () => {
+  misses++;
+};
 
 export const getCacheStats = async () => {
   return {
@@ -47,4 +52,22 @@ export const delPattern = async (pattern: string) => {
   }
 };
 
-export default redis; 
+export const readinessCheckCache = async (): Promise<{
+  up: boolean;
+  latencyMs: number;
+  error?: string;
+}> => {
+  const start = Date.now();
+  try {
+    await redis.ping();
+    return { up: true, latencyMs: Date.now() - start };
+  } catch (err: any) {
+    return {
+      up: false,
+      latencyMs: Date.now() - start,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+};
+
+export default redis;

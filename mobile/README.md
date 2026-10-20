@@ -1,40 +1,52 @@
 # Stellar Save Mobile
 
-Native iOS/Android app built with Expo (React Native + TypeScript). This is
-the v4.0 native mobile app, distinct from the Capacitor-based web wrapper in
-`frontend/` (see `frontend/MOBILE_README.md`).
+Native iOS/Android mobile application for Stellar Save built with Expo (React Native + TypeScript).
 
-## Status
+## Setup & Development
 
-Scaffold only (#995). Wallet creation (#996), signing (#997), and onboarding/
-KYC (#998) are tracked as separate follow-up issues and land as their own
-PRs on top of this structure.
+### Prerequisites
+- Node.js (v18+)
+- pnpm (v8+)
+- Expo CLI
+- iOS Simulator (macOS + Xcode) or Android Emulator (Android Studio)
 
-## Local run
-
+### Installation & Local Run
 ```bash
+# Navigate to mobile directory
 cd mobile
+
+# Install dependencies
 pnpm install
-pnpm start        # opens Expo Dev Tools
-pnpm ios          # run in iOS simulator (requires Xcode)
-pnpm android      # run in Android emulator (requires Android Studio)
+
+# Start Expo development server (opens Expo Dev Tools)
+pnpm start
+
+# Launch on iOS Simulator
+pnpm ios
+
+# Launch on Android Emulator
+pnpm android
 ```
 
-For crash reporting, set `EXPO_PUBLIC_SENTRY_DSN` in the Expo environment.
+## Environment Configuration
 
-## Project structure
+Configure Expo environment variables in `.env` or `app.json`:
+- `EXPO_PUBLIC_SENTRY_DSN`: Crash reporting and telemetry endpoint.
+- `EXPO_PUBLIC_STELLAR_NETWORK`: Target network (`testnet`, `mainnet`, etc.).
+
+## Project Structure
 
 ```
 mobile/
-  App.tsx              # app entry
-  src/
-    navigation/         # React Navigation tree
-    screens/             # screen components
-  app.json              # Expo config
+├── App.tsx             # Main application entry point
+├── src/
+│   ├── navigation/     # React Navigation stack & tabs
+│   └── screens/        # UI Screen components (Dashboard, JoinGroup, etc.)
+├── app.json            # Expo project configuration
+└── package.json        # Dependencies & scripts
 ```
 
-## Conventions
+## Code Conventions & Standards
 
-ESLint/Prettier extend the repo-root configs (`eslint.config.base.js`,
-`.prettierrc`). Commit messages are linted by the root `commitlint.config.js`
-via husky, same as `frontend/` and `backend/`.
+- ESLint & Prettier configs extend root `eslint.config.base.js` and `.prettierrc`.
+- Commit messages follow Conventional Commits enforced by Husky & commitlint.

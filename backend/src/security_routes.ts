@@ -1,19 +1,23 @@
 /**
  * Security API Routes (Issues #1102, #1103, #1104, #1105)
- * 
+ *
  * Example routes demonstrating security feature usage.
  */
 
-import express, { Request, Response } from 'express';
-import { transactionDecoderService } from './transaction_decoder_service';
+import express from 'express';
+
+import { jwtAuthMiddleware } from './modules/auth/auth_middleware';
 import {
   sanitizeInputMiddleware,
   sanitizeGroupMetadataMiddleware,
   InputSanitizer,
 } from './input_sanitization_middleware';
-import { secretsManager } from './secrets_manager_service';
-import { jwtAuthMiddleware, AuthenticatedRequest } from './auth_middleware';
 import { logger } from './logger';
+import { secretsManager } from './secrets_manager_service';
+import { transactionDecoderService } from './transaction_decoder_service';
+
+import type { AuthenticatedRequest } from './modules/auth/auth_middleware';
+import type { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -195,7 +199,7 @@ router.post('/validate-input', (req: Request, res: Response) => {
     }
 
     return res.json({ valid: result });
-  } catch (error) {
+  } catch {
     return res.status(400).json({ error: 'Validation failed' });
   }
 });

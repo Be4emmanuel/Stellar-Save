@@ -8,8 +8,11 @@
  * - Dark mode toggle button (sun/moon icon) — Issue #772
  * - Wallet connect button
  */
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import CloseIcon from '@mui/icons-material/Close';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import MenuIcon from '@mui/icons-material/Menu';
+import StarIcon from '@mui/icons-material/Star';
 import {
   AppBar,
   Box,
@@ -26,15 +29,13 @@ import {
   Divider,
   Tooltip,
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
-import CloseIcon from '@mui/icons-material/Close';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import StarIcon from '@mui/icons-material/Star';
-import { ROUTES } from '../routing/constants';
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+
+import { OfflineIndicator } from './OfflineIndicator';
 import { WalletButton } from './WalletButton';
 import { useThemeMode } from '../context/ThemeContext';
-import { OfflineIndicator } from './OfflineIndicator';
+import { ROUTES } from '../routing/constants';
 
 const DRAWER_WIDTH = 260;
 
@@ -66,18 +67,22 @@ export default function Header() {
       aria-label="Mobile navigation"
     >
       {/* Drawer header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 2,
+          py: 1.5,
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <StarIcon sx={{ color: 'primary.main', fontSize: 22 }} />
           <Typography variant="h6" fontWeight={700} color="primary">
             Stellar-Save
           </Typography>
         </Box>
-        <IconButton
-          onClick={handleDrawerClose}
-          aria-label="Close navigation menu"
-          size="small"
-        >
+        <IconButton onClick={handleDrawerClose} aria-label="Close navigation menu" size="small">
           <CloseIcon />
         </IconButton>
       </Box>
@@ -116,13 +121,25 @@ export default function Header() {
       <Divider />
 
       {/* Theme toggle in drawer */}
-      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Box
+        sx={{
+          px: 2,
+          py: 1.5,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
         <Typography variant="body2" color="text.secondary">
           {mode === 'dark' ? 'Dark mode' : 'Light mode'}
         </Typography>
         <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
           <IconButton onClick={toggleTheme} size="small" aria-label="Toggle theme">
-            {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+            {mode === 'dark' ? (
+              <LightModeIcon fontSize="small" />
+            ) : (
+              <DarkModeIcon fontSize="small" />
+            )}
           </IconButton>
         </Tooltip>
       </Box>
@@ -158,7 +175,12 @@ export default function Header() {
             aria-label="Stellar-Save home"
           >
             <StarIcon sx={{ color: 'primary.main', fontSize: 26 }} />
-            <Typography variant="h6" fontWeight={700} color="primary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Typography
+              variant="h6"
+              fontWeight={700}
+              color="primary"
+              sx={{ display: { xs: 'none', sm: 'block' } }}
+            >
               Stellar-Save
             </Typography>
           </Box>

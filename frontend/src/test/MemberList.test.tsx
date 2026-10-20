@@ -1,8 +1,10 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemberList, Member } from '../components/MemberList';
-import { makeMember } from './factories';
+import { describe, it, expect } from 'vitest';
+
+import { MemberList } from '../components/MemberList';
+
+import type { Member } from '../components/MemberList';
 
 const mockMembers: Member[] = [
   makeMember({ address: 'GABC123DEF456GHI789JKL012MNO345PQR678STU901VWX234YZA567BCD890' }) as unknown as Member,
@@ -37,24 +39,24 @@ describe('MemberList', () => {
   it('sorts by address when clicking address header', async () => {
     const user = userEvent.setup();
     render(<MemberList members={mockMembers} />);
-    
+
     const sortButton = screen.getByLabelText('Sort by address');
     // initial state: sortField=address, sortOrder=asc → shows ↑
     // clicking toggles to desc → ↓
     await user.click(sortButton);
-    
+
     expect(sortButton).toHaveTextContent('↓');
   });
 
   it('toggles sort order on repeated clicks', async () => {
     const user = userEvent.setup();
     render(<MemberList members={mockMembers} />);
-    
+
     const sortButton = screen.getByLabelText('Sort by address');
     // initial: asc (↑), click → desc (↓)
     await user.click(sortButton);
     expect(sortButton).toHaveTextContent('↓');
-    
+
     // click again → asc (↑)
     await user.click(sortButton);
     expect(sortButton).toHaveTextContent('↑');
@@ -63,27 +65,25 @@ describe('MemberList', () => {
   it('sorts by contribution status', async () => {
     const user = userEvent.setup();
     render(<MemberList members={mockMembers} />);
-    
+
     const sortButton = screen.getByLabelText('Sort by contribution status');
     await user.click(sortButton);
-    
+
     expect(sortButton).toHaveTextContent('↑');
   });
 
   it('sorts by payout status', async () => {
     const user = userEvent.setup();
     render(<MemberList members={mockMembers} />);
-    
+
     const sortButton = screen.getByLabelText('Sort by payout status');
     await user.click(sortButton);
-    
+
     expect(sortButton).toHaveTextContent('↑');
   });
 
   it('applies custom className', () => {
-    const { container } = render(
-      <MemberList members={mockMembers} className="custom-class" />
-    );
+    const { container } = render(<MemberList members={mockMembers} className="custom-class" />);
     expect(container.querySelector('.custom-class')).toBeInTheDocument();
   });
 

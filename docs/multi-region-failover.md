@@ -207,6 +207,138 @@ dig +short api.stellar-save.app
 - [ ] (Drill) Replica promotion succeeds and the secondary backend accepts writes.
 - [ ] Record the measured failover time in the test log.
 
+## Automated failover test
+
+`tests/multi_region_failover_test.sh` is a comprehensive, runnable integration
+test that automates the manual runbook above. It works in two modes:
+
+| Mode | Command | Use case |
+|------|---------|----------|
+| **Dry-run** (`DRY_RUN=1`, default) | `bash tests/multi_region_failover_test.sh` | CI — no AWS credentials required; AWS and DNS calls are mocked |
+| **Live** (`DRY_RUN=0`) | `DRY_RUN=0 PRIMARY_HEALTH_CHECK_ID=<id> bash tests/multi_region_failover_test.sh` | Quarterly drills against a real multi-region deployment |
+
+### What the test does
+
+1. **Baseline** — confirms `/health` and `/api/groups` return `200`, records the
+   current DNS resolution of the API hostname.
+2. **Induce failure** — disables the primary Route53 health check
+   (`aws route53 update-health-check --disabled`). In dry-run mode the call is
+   mocked and an internal flag is set instead.
+3. **Poll until DNS shifts** — polls `dig +short <hostname>` every
+   `POLL_INTERVAL_SECONDS` seconds for up to `RTO_SECONDS` seconds, recording
+   the first instant the resolved IP changes to the secondary region. Continuous
+   HTTP probes of `/health` are tracked throughout.
+4. **Assert RTO ≤ 150s** — fails if the DNS shift took longer than
+   `RTO_SECONDS`.
+5. **Assert no data loss** — fails if `/health` had more than 2 consecutive
+   non-200 responses during the transition.
+6. **Assert DNS resolved to secondary** — confirms the post-failover IP differs
+   from the baseline IP.
+7. **Restore** — re-enables the primary health check
+   (`--no-disabled`). This runs in a `trap EXIT` so it always executes, even
+   if the test errors out.
+8. **Assert primary recovery** — polls until DNS shifts back to the primary IP
+   (or `RTO_SECONDS` elapses).
+9. **Write results** — writes `docs/releases/failover-results.json` (override with `RESULTS_DIR`).
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PRIMARY_HEALTH_CHECK_ID` | *(required in live mode)* | Route53 health check ID for the primary region |
+| `API_ENDPOINT` | `http://localhost:3001` | Base URL of the API (e.g. `https://api.stellar-save.app`) |
+| `PRIMARY_REGION` | `us-east-1` | AWS region of the primary |
+| `SECONDARY_REGION` | `eu-west-1` | AWS region of the secondary |
+| `RTO_SECONDS` | `150` | Maximum allowed failover time in seconds |
+| `POLL_INTERVAL_SECONDS` | `10` | How often (in seconds) to probe DNS and `/health` during failover |
+| `DRY_RUN` | `1` | `1` = mock AWS + DNS (CI-safe); `0` = real execution |
+| `AWS_PROFILE` | *(none)* | Optional AWS CLI profile name |
+
+### Running in dry-run mode (CI / no credentials needed)
+
+```bash
+# Default — DRY_RUN=1 is the default, so no extra flags needed
+bash tests/multi_region_failover_test.sh
+
+# Customise timing
+POLL_INTERVAL_SECONDS=5 RTO_SECONDS=30 bash tests/multi_region_failover_test.sh
+```
+
+Expected output (abbreviated):
+
+```
+══ multi-region failover test [DRY-RUN] ════════════════════════════════
+  AWS calls are mocked. No real infrastructure is modified.
+  API endpoint   : http://localhost:3001
+  RTO threshold  : 150s
+  Poll interval  : 10s
+
+══ 1. baseline health check ════════════════════════════════════════════
+  ✅ baseline: /health probe skipped in dry-run (endpoint not required)
+  ✅ baseline: DNS resolves to 192.0.2.1
+  …
+
+══ 7. overall result ═══════════════════════════════════════════════════
+  Measured failover time : 10s (threshold: 150s)
+  DNS shifted to secondary: true
+  /health continuous      : true
+  Primary recovered       : true
+  ✅ overall: all assertions passed
+
+  Results: 15 passed, 0 failed
+```
+
+### Running in live mode (quarterly drill)
+
+```bash
+# Get the health check IDs from Terraform
+cd infra/envs/production
+PRIMARY_HC_ID=$(terraform output -json multi_region_health_check_ids | jq -r '.[0]')
+
+DRY_RUN=0 \
+  PRIMARY_HEALTH_CHECK_ID="$PRIMARY_HC_ID" \
+  API_ENDPOINT="https://api.stellar-save.app" \
+  PRIMARY_REGION="us-east-1" \
+  SECONDARY_REGION="eu-west-1" \
+  bash tests/multi_region_failover_test.sh
+```
+
+> **Warning**: live mode temporarily disables the primary health check, causing
+> real traffic to shift to the secondary region. Do not run this against
+> production without advance notice to on-call. The cleanup trap restores the
+> health check even if the test exits early.
+
+### Test results
+
+Results are written to **`docs/releases/failover-results.json`** after every run
+(set `RESULTS_DIR` to write elsewhere):
+
+```json
+{
+  "failover_time_seconds": 112,
+  "rto_threshold": 150,
+  "passed": true,
+  "dns_shifted": true,
+  "health_endpoint_continuous": true,
+  "primary_recovered": true,
+  "timestamp": "2026-07-30T09:28:22Z"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `failover_time_seconds` | Measured seconds from health-check disable to DNS shift |
+| `rto_threshold` | The `RTO_SECONDS` value used for this run |
+| `passed` | `true` if all assertions passed |
+| `dns_shifted` | `true` if DNS resolved to a different IP after failover |
+| `health_endpoint_continuous` | `true` if `/health` had ≤2 consecutive non-200 responses during transition |
+| `primary_recovered` | `true` if DNS returned to the primary IP after restore |
+| `timestamp` | ISO-8601 UTC timestamp of the run |
+
+The file is updated by the `trap EXIT` cleanup, so it is always written even
+when the test fails or is interrupted. Commit it to track failover performance
+over time, or archive it as a CI artifact.
+
 ## Related documents
 
 - [Disaster Recovery](disaster-recovery.md) — failure scenarios, RTO/RPO, weekly CI checks

@@ -1,9 +1,12 @@
 import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
-import { withSpan } from '../tracing';
+
 import { config } from '../config';
+import { withSpan } from '../tracing';
+import { withSorobanCircuit } from './rpc_circuit_breaker';
 
 export interface SorobanPoolConfig {
   rpcUrl: string;
+  fallbackRpcUrls?: string[];
   poolSize?: number;
   acquireTimeoutMs?: number;
 }
@@ -25,13 +28,19 @@ export class SorobanClientPool {
   private acquireTimeouts = 0;
   private readonly total: number;
   private readonly acquireTimeoutMs: number;
+  private readonly fallbackClients: SorobanRpc.Server[];
 
   constructor(config: SorobanPoolConfig) {
     this.total = config.poolSize ?? 5;
     this.acquireTimeoutMs = config.acquireTimeoutMs ?? 5000;
+    this.fallbackClients = (config.fallbackRpcUrls ?? []).map(
+      (rpcUrl) => new SorobanRpc.Server(rpcUrl, { allowHttp: rpcUrl.startsWith('http://') }),
+    );
 
     for (let i = 0; i < this.total; i++) {
-      this.pool.push(new SorobanRpc.Server(config.rpcUrl, { allowHttp: config.rpcUrl.startsWith('http://') }));
+      this.pool.push(
+        new SorobanRpc.Server(config.rpcUrl, { allowHttp: config.rpcUrl.startsWith('http://') })
+      );
     }
   }
 
@@ -44,7 +53,7 @@ export class SorobanClientPool {
 
     return new Promise<SorobanRpc.Server>((resolve, reject) => {
       const timer = setTimeout(() => {
-        const idx = this.waiters.findIndex(w => w.timer === timer);
+        const idx = this.waiters.findIndex((w) => w.timer === timer);
         if (idx !== -1) this.waiters.splice(idx, 1);
         this.acquireTimeouts++;
         reject(new Error(`SorobanClientPool: acquire timed out after ${this.acquireTimeoutMs}ms`));
@@ -69,6 +78,11 @@ export class SorobanClientPool {
    * Run `fn` with a pooled Soroban RPC client, wrapped in an OpenTelemetry span
    * so contract-execution latency (simulate / invoke) shows up in the trace.
    *
+   * The call also passes through the shared Soroban circuit breaker (#1511).
+   * The breaker sits inside the acquire/release pair so a fast-failed call still
+   * returns its client to the pool, and outside `fn` so its timeout covers the
+   * whole RPC round trip rather than only the connection.
+   *
    * Full in-wasm contract tracing is not possible, so this span around the host
    * RPC call is the distributed-tracing boundary for contract execution. Pass
    * the contract function name as `op` (e.g. `contribute`) to label the span and
@@ -77,21 +91,32 @@ export class SorobanClientPool {
    * @param fn  Work to perform with the client
    * @param op  Optional contract function / RPC operation name for the span
    */
-  async withClient<T>(
-    fn: (client: SorobanRpc.Server) => Promise<T>,
-    op?: string,
-  ): Promise<T> {
+  async withClient<T>(fn: (client: SorobanRpc.Server) => Promise<T>, op?: string): Promise<T> {
     return withSpan(
       op ? `soroban.invoke ${op}` : 'soroban.rpc',
       { 'rpc.system': 'soroban', ...(op ? { 'soroban.function': op } : {}) },
       async () => {
         const client = await this.acquire();
         try {
-          return await fn(client);
+          return await withSorobanCircuit(async () => {
+            try {
+              return await fn(client);
+            } catch (primaryError) {
+              for (const fallbackClient of this.fallbackClients) {
+                try {
+                  return await fn(fallbackClient);
+                } catch {
+                  // Continue through the configured endpoints. The breaker sees
+                  // a failure only when every endpoint is unavailable.
+                }
+              }
+              throw primaryError;
+            }
+          });
         } finally {
           this.release(client);
         }
-      },
+      }
     );
   }
 
@@ -114,6 +139,7 @@ export function getSorobanPool(): SorobanClientPool {
   if (!_pool) {
     _pool = new SorobanClientPool({
       rpcUrl: config.stellar.rpcUrl,
+      fallbackRpcUrls: config.stellar.fallbackRpcUrls,
       poolSize: config.soroban.poolSize,
       acquireTimeoutMs: config.soroban.poolTimeoutMs,
     });

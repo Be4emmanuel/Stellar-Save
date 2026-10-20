@@ -1,12 +1,15 @@
-import crypto from 'crypto';
 import { spawn } from 'child_process';
+import crypto from 'crypto';
+
 import {
   S3Client,
   PutObjectCommand,
   ListObjectsV2Command,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+
 import { config } from '../config';
+import { logger } from '../logger';
 
 export interface BackupResult {
   key: string;
@@ -53,7 +56,7 @@ export class BackupService {
    * and return metadata about the backup.
    */
   async runBackup(): Promise<BackupResult> {
-    console.log('[BackupService] Running pg_dump...');
+    logger.info('[BackupService] Running pg_dump...');
     const data = await this.pgDump();
     const timestamp = new Date();
     const key = `backups/stellar-save-${formatTimestamp(timestamp)}.dump`;
@@ -61,7 +64,7 @@ export class BackupService {
     await this.uploadToS3(data, key);
 
     const checksum = crypto.createHash('sha256').update(data).digest('hex');
-    console.log(
+    logger.info(
       `[BackupService] Backup complete — s3://${this.bucket}/${key} (${data.length} bytes)`
     );
     return { key, sizeBytes: data.length, timestamp, checksum };
@@ -80,13 +83,13 @@ export class BackupService {
       const ts = this.parseKeyTimestamp(key);
       if (ts && ts.getTime() < cutoff) {
         await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
-        console.log(`[BackupService] Deleted expired backup: ${key}`);
+        logger.info(`[BackupService] Deleted expired backup: ${key}`);
         deleted++;
       }
     }
 
     if (deleted > 0) {
-      console.log(
+      logger.info(
         `[BackupService] Retention policy applied — deleted ${deleted} backup(s) older than ${this.retentionDays} days`
       );
     }
@@ -114,8 +117,8 @@ export class BackupService {
         'pg_dump',
         [
           '--format=custom', // binary + built-in LZ compression
-          '--compress=9',    // maximum compression level
-          '--no-password',   // credentials come from the connection string
+          '--compress=9', // maximum compression level
+          '--no-password', // credentials come from the connection string
           databaseUrl,
         ],
         { stdio: ['ignore', 'pipe', 'pipe'] }
@@ -127,11 +130,11 @@ export class BackupService {
         const msg = chunk.toString().trim();
         // pg_dump writes progress notices to stderr; only log real errors
         if (msg && !msg.startsWith('pg_dump: last built-in')) {
-          console.error('[pg_dump stderr]', msg);
+          logger.error('[pg_dump stderr]', msg);
         }
       });
 
-      child.on('close', code => {
+      child.on('close', (code) => {
         if (code === 0) {
           resolve(Buffer.concat(chunks));
         } else {
@@ -139,7 +142,7 @@ export class BackupService {
         }
       });
 
-      child.on('error', err => {
+      child.on('error', (err) => {
         reject(new Error(`Failed to spawn pg_dump: ${err.message}`));
       });
     });
@@ -161,7 +164,7 @@ export class BackupService {
       new ListObjectsV2Command({ Bucket: this.bucket, Prefix: 'backups/' })
     );
     return (res.Contents ?? [])
-      .map(obj => obj.Key)
+      .map((obj) => obj.Key)
       .filter((k): k is string => typeof k === 'string');
   }
 

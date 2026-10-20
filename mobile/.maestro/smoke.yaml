@@ -9,13 +9,15 @@ appId: com.stellarsave.app
 - assertVisible:
     id: "welcome-screen"
 - assertVisible:
-    text: "Stellar Save"
+    text: "Welcome to Stellar Save"
 - tapOn:
     id: "get-started-button"
+- extendedWaitUntil:
+    visible:
+      id: "wallet-setup-screen"
+    timeout: 10000
 - assertVisible:
-    id: "wallet-connect-screen"
-- assertVisible:
-    text: "Connect Your Wallet"
+    text: "Set up your wallet"
 - back
 
 # ── Wallet creation abbreviated check ────────────────────────────────────────

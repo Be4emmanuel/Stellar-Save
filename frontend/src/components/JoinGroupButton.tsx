@@ -1,8 +1,11 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+
 import { Button } from './Button';
-import { useWallet } from '../hooks/useWallet';
 import { useContract } from '../hooks/useContract';
 import { useTransaction, explorerUrl } from '../hooks/useTransaction';
+import { useWallet } from '../hooks/useWallet';
+import { queryKeys } from '../lib/queryKeys';
 
 interface JoinGroupButtonProps {
   groupId: number;
@@ -25,14 +28,35 @@ export function JoinGroupButton({
   const { joinGroup } = useContract();
   const { state, txHash, error, execute, reset } = useTransaction();
   const [showConfirm, setShowConfirm] = useState(false);
+  const queryClient = useQueryClient();
 
   const isFull = currentMembers >= maxMembers;
   const isPending = state === 'pending';
 
-  if (isMember) return <Button disabled size="sm">Already Joined</Button>;
-  if (isFull) return <Button disabled size="sm">Group Full</Button>;
-  if (isActive) return <Button disabled size="sm">Group Active</Button>;
-  if (walletStatus !== 'connected') return <Button disabled size="sm">Connect Wallet</Button>;
+  if (isMember)
+    return (
+      <Button disabled size="sm">
+        Already Joined
+      </Button>
+    );
+  if (isFull)
+    return (
+      <Button disabled size="sm">
+        Group Full
+      </Button>
+    );
+  if (isActive)
+    return (
+      <Button disabled size="sm">
+        Group Active
+      </Button>
+    );
+  if (walletStatus !== 'connected')
+    return (
+      <Button disabled size="sm">
+        Connect Wallet
+      </Button>
+    );
 
   const handleJoin = async () => {
     setShowConfirm(false);
@@ -41,13 +65,24 @@ export function JoinGroupButton({
       if (result.error) throw new Error(result.error.message);
       return result.txHash!;
     });
-    if (state !== 'failed') onSuccess?.();
+    if (state !== 'failed') {
+      // Joining changes this group's member count/detail and its standing
+      // in any group list. queryKeys.groups.all() is ['groups'], and React
+      // Query invalidates by key-prefix match, so this also invalidates
+      // every groups.list(...)/groups.detail(id) entry -- the shared cache
+      // catches up immediately instead of waiting out each query's
+      // staleTime.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.groups.all() });
+      onSuccess?.();
+    }
   };
 
   if (state === 'confirmed') {
     return (
       <div>
-        <Button disabled size="sm" variant="ghost">Joined ✓</Button>
+        <Button disabled size="sm" variant="ghost">
+          Joined ✓
+        </Button>
         {txHash && (
           <a
             href={explorerUrl(txHash)}
@@ -65,16 +100,28 @@ export function JoinGroupButton({
   if (showConfirm) {
     return (
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button size="sm" onClick={handleJoin} loading={isPending} disabled={isPending || !activeAddress}>
+        <Button
+          size="sm"
+          onClick={handleJoin}
+          loading={isPending}
+          disabled={isPending || !activeAddress}
+        >
           Confirm
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => setShowConfirm(false)} disabled={isPending}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setShowConfirm(false)}
+          disabled={isPending}
+        >
           Cancel
         </Button>
         {state === 'failed' && error && (
           <span style={{ color: 'var(--color-error)', fontSize: 12 }}>
             {error}{' '}
-            <button onClick={reset} style={{ fontSize: 11 }}>Dismiss</button>
+            <button onClick={reset} style={{ fontSize: 11 }} aria-label="Dismiss error">
+              Dismiss
+            </button>
           </span>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stack, Typography } from '@mui/material';
 import { AppCard, AppLayout } from '../ui';
@@ -11,21 +11,26 @@ import { useToast } from '../components/Toast/useToast';
 import { Button } from '../components/Button';
 import { GroupCardSkeleton } from '../components/Skeleton/GroupCardSkeleton';
 import { EmptyState } from '../components/EmptyState/EmptyState';
+import { ErrorState } from '../components/ErrorState';
 import { useDiscoveryFeed } from '../hooks/useDiscoveryFeed';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import { ROUTES } from '../routing/constants';
 import type { PublicGroup } from '../types/group';
 import type { GroupFilters as GroupFiltersType } from '../types/group';
 import './BrowseGroupsPage.css';
 
 const SAVED_SEARCH_KEY = 'stellar-save:search-preferences';
+// Stable reference so useLocalStorage's internal effect (keyed on this
+// default value) doesn't re-run on every render — a fresh `{}` literal
+// here would change identity each render and re-trigger that effect.
+const EMPTY_SAVED_SEARCH: Partial<GroupFiltersType> = {};
 
 function BrowseGroupsContent() {
-  const navigate = useNavigate();
   const { addToast } = useToast();
 
   const [savedSearch, setSavedSearch] = useLocalStorage<Partial<GroupFiltersType>>(
     SAVED_SEARCH_KEY,
-    {}
+    EMPTY_SAVED_SEARCH
   );
 
   const {
@@ -39,7 +44,7 @@ function BrowseGroupsContent() {
     clearFilters,
     refresh,
     loadMore,
-  } = useDiscoveryFeed({ initialPageSize: 6 });
+  } = useDiscoveryFeed({ initialPageSize: 6, initialFilters: savedSearch });
 
   const [joinGroup, setJoinGroup] = useState<PublicGroup | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -52,8 +57,11 @@ function BrowseGroupsContent() {
     filters.minMembers !== '' ||
     filters.maxMembers !== '';
 
-  // Derive autocomplete suggestions from all loaded group names
-  const suggestions = useMemo(() => groups.map((g) => g.name), [groups]);
+  // Derive autocomplete suggestions from all loaded recommendation names
+  const suggestions = useMemo(
+    () => recommendations.map((g) => g.name),
+    [recommendations],
+  );
 
   const handleSearch = (q: string) => {
     setFilters({ search: q });
@@ -98,10 +106,7 @@ function BrowseGroupsContent() {
         <Stack spacing={2}>
           <div aria-live="polite" aria-atomic="true">
             {error && (
-              <div className="browse-groups-error" role="alert">
-                <p>{error}</p>
-                <Button onClick={refresh}>Retry</Button>
-              </div>
+              <ErrorState message={error} onRetry={refresh} />
             )}
           </div>
 
@@ -121,7 +126,7 @@ function BrowseGroupsContent() {
                   suggestions={suggestions}
                 />
                 <div className="browse-groups-controls-right">
-                  <GroupFilters onFilterChange={(f) => setFilters(f)} initialFilters={filters} />
+                  <GroupFilters onFilterChange={handleFilterChange} initialFilters={filters} />
                   <Button variant="secondary" onClick={refresh} disabled={isLoading}>
                     Refresh
                   </Button>
@@ -163,6 +168,8 @@ function BrowseGroupsContent() {
                             ? 'Try broadening your filters or search terms to discover more groups.'
                             : 'Refresh to update your personalized recommendations.'
                         }
+                        actionLabel={hasActiveFilters ? 'Clear filters' : undefined}
+                        onAction={hasActiveFilters ? handleClearFilters : undefined}
                         className="browse-groups-empty"
                       />
                     )}

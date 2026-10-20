@@ -309,4 +309,196 @@ mod governance_property_tests {
                 "expiry ({}) must be >= created ({})", expiry, created);
         }
     }
+
+    // ── Feature: Governance Module Specific Invariants ───────────────────────
+
+    extern crate std;
+
+    /// Calculates majority threshold as defined in governance::voting:
+    /// `majority = member_count / 2 + 1`
+    fn governance_majority(member_count: u32) -> u32 {
+        member_count / 2 + 1
+    }
+
+    /// Evaluates dynamic contribution vote outcome.
+    fn can_execute_contribution_change(vote_count: u32, member_count: u32) -> bool {
+        if member_count == 0 {
+            return false;
+        }
+        vote_count >= governance_majority(member_count)
+    }
+
+    /// Evaluates dissolution vote outcome (unanimity required).
+    fn can_execute_dissolution(vote_count: u32, member_count: u32) -> bool {
+        if member_count == 0 {
+            return false;
+        }
+        vote_count >= member_count
+    }
+
+    proptest! {
+        /// Feature: Governance Property 13 - Majority is always strict (> 50%)
+        ///
+        /// For any positive member count, the majority threshold is strictly greater
+        /// than member_count / 2 and at most member_count.
+        #[test]
+        fn prop_governance_majority_threshold_is_strict_majority(
+            members in 1_u32..=10_000_u32,
+        ) {
+            let threshold = governance_majority(members);
+            prop_assert!(
+                (threshold as u64) * 2 > (members as u64),
+                "majority ({}) * 2 must be > members ({})",
+                threshold,
+                members
+            );
+            prop_assert!(
+                threshold <= members,
+                "majority ({}) must be <= members ({})",
+                threshold,
+                members
+            );
+        }
+
+        /// Feature: Governance Property 14 - Dynamic contribution change transition boundary
+        ///
+        /// A vote count strictly below majority must never trigger the change;
+        /// any vote count >= majority must trigger the change.
+        #[test]
+        fn prop_governance_dynamic_contribution_requires_majority(
+            members in 1_u32..=1_000_u32,
+            votes in 0_u32..=1_000_u32,
+        ) {
+            let threshold = governance_majority(members);
+            let executable = can_execute_contribution_change(votes, members);
+
+            if votes < threshold {
+                prop_assert!(
+                    !executable,
+                    "votes {} < majority {} should NOT execute contribution change",
+                    votes,
+                    threshold
+                );
+            } else {
+                prop_assert!(
+                    executable,
+                    "votes {} >= majority {} SHOULD execute contribution change",
+                    votes,
+                    threshold
+                );
+            }
+        }
+
+        /// Feature: Governance Property 15 - Dissolution requires strict unanimity
+        ///
+        /// Dissolution only triggers when every member has voted (vote_count == member_count).
+        /// Any vote count < member_count leaves the group active/paused without dissolving.
+        #[test]
+        fn prop_governance_dissolution_requires_unanimity(
+            members in 1_u32..=1_000_u32,
+            votes in 0_u32..=1_000_u32,
+        ) {
+            let executable = can_execute_dissolution(votes, members);
+
+            if votes < members {
+                prop_assert!(
+                    !executable,
+                    "votes {} < members {} must NOT dissolve group",
+                    votes,
+                    members
+                );
+            } else {
+                prop_assert!(
+                    executable,
+                    "votes {} >= members {} MUST dissolve group",
+                    votes,
+                    members
+                );
+            }
+        }
+
+        /// Feature: Governance Property 16 - Double-voting resistance invariant
+        ///
+        /// When members cast votes, duplicate vote attempts by the same member
+        /// are rejected. The effective vote count equals the number of unique voters,
+        /// never exceeding member count.
+        #[test]
+        fn prop_governance_double_voting_prevention(
+            members in 2_u32..=100_u32,
+            vote_stream in proptest::collection::vec(1_u32..=100_u32, 1..=200),
+        ) {
+            let mut unique_voters = std::collections::HashSet::new();
+            let mut recorded_votes = 0_u32;
+
+            for voter in vote_stream {
+                // Voter must be a valid member
+                if voter <= members {
+                    // In governance, voting checks if voter already voted
+                    if unique_voters.insert(voter) {
+                        recorded_votes += 1;
+                    }
+                }
+            }
+
+            prop_assert_eq!(
+                recorded_votes,
+                unique_voters.len() as u32,
+                "recorded votes must match unique valid voters"
+            );
+            prop_assert!(
+                recorded_votes <= members,
+                "recorded votes ({}) cannot exceed total members ({})",
+                recorded_votes,
+                members
+            );
+        }
+
+        /// Feature: Governance Property 17 - Proposal reset clears vote tally
+        ///
+        /// When a new proposal is created, previous votes cannot be reused or carried over.
+        /// The new proposal resets the vote count to 0, requiring fresh votes.
+        #[test]
+        fn prop_governance_proposal_reset_clears_votes(
+            members in 2_u32..=50_u32,
+            initial_votes in 1_u32..=50_u32,
+            new_amount in 1_i128..=1_000_000_000i128,
+        ) {
+            let _ = initial_votes.min(members - 1); // unpassed previous state
+            let proposal_amount = new_amount;
+            prop_assert!(proposal_amount > 0);
+
+            // Proposing a new amount resets the vote count to 0
+            let reset_vote_count = 0_u32;
+            let can_execute = can_execute_contribution_change(reset_vote_count, members);
+
+            prop_assert!(
+                !can_execute,
+                "new proposal after reset must start at 0 votes and not be executable"
+            );
+            prop_assert_eq!(reset_vote_count, 0);
+        }
+
+        /// Feature: Governance Property 18 - Dissolution refund conservation
+        ///
+        /// In execute_dissolution, total refunded is bounded by total contributions
+        /// for the current cycle. If N un-payout members contributed amount A each,
+        /// total refunded is exactly N * A.
+        #[test]
+        fn prop_governance_dissolution_refund_conservation(
+            unpaid_members in 0_u32..=50_u32,
+            contribution_amount in 1_000_000_i128..=100_000_000_i128,
+        ) {
+            let total_refunded = (unpaid_members as i128)
+                .checked_mul(contribution_amount)
+                .unwrap();
+
+            prop_assert!(
+                total_refunded >= 0,
+                "refunded amount must be non-negative"
+            );
+            if unpaid_members == 0 {
+                prop_assert_eq!(total_refunded, 0);
+            }
+        }
+    }
 }

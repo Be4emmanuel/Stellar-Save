@@ -1,7 +1,7 @@
 import 'vitest';
 
 declare module 'jest-axe' {
-  import { ReactElement } from 'react';
+  import type { ReactElement } from 'react';
 
   export interface AxeResults {
     violations: Array<{
@@ -11,17 +11,17 @@ declare module 'jest-axe' {
       description: string;
       help: string;
       helpUrl: string;
-      nodes: any[];
+      nodes: unknown[];
     }>;
-    passes: any[];
-    incomplete: any[];
-    inapplicable: any[];
+    passes: unknown[];
+    incomplete: unknown[];
+    inapplicable: unknown[];
   }
 
   export function axe(element: Element | ReactElement): Promise<AxeResults>;
 
   export const toHaveNoViolations: {
-    toHaveNoViolations(this: any, results: AxeResults): { pass: boolean; message(): string };
+    toHaveNoViolations(this: unknown, results: AxeResults): { pass: boolean; message(): string };
   };
 }
 

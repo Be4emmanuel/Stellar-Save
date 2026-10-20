@@ -1,6 +1,12 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { axe, toHaveNoViolations } from 'jest-axe';
+import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { ContributionSuccessModal } from '../components/ContributionSuccessModal';
+
+expect.extend(toHaveNoViolations);
 
 // AudioContext is not available in jsdom — mock it
 beforeEach(() => {
@@ -123,5 +129,78 @@ describe('ContributionSuccessModal', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveAttribute('aria-labelledby', 'success-modal-title');
+  });
+
+  it('has an aria-describedby pointing to the amount/cycle summary', () => {
+    render(<ContributionSuccessModal {...baseProps} />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-describedby', 'success-modal-description');
+    expect(document.getElementById('success-modal-description')).toHaveTextContent(/50 XLM/);
+  });
+
+  it('has no axe violations', async () => {
+    const { container } = render(<ContributionSuccessModal {...baseProps} />);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no axe violations with milestone and explorer link shown', async () => {
+    const { container } = render(
+      <ContributionSuccessModal {...baseProps} milestoneLabel="5th Contribution!" txHash="abc123" />
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('moves focus into the dialog when opened', () => {
+    render(<ContributionSuccessModal {...baseProps} />);
+    expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it('Tab cycles focus within the dialog and wraps around', async () => {
+    const user = userEvent.setup();
+    render(<ContributionSuccessModal {...baseProps} txHash="abc123" />);
+
+    const focusable = [
+      screen.getByRole('button', { name: /mute sound/i }),
+      screen.getByRole('button', { name: /close/i }),
+      screen.getByRole('link', { name: /share/i }),
+      screen.getByRole('link', { name: /view on stellar explorer/i }),
+      screen.getByRole('button', { name: /^done$/i }),
+    ];
+
+    // Focus should start on the first focusable element.
+    expect(document.activeElement).toBe(focusable[0]);
+
+    // Tab from the last element wraps back to the first.
+    focusable[focusable.length - 1].focus();
+    await user.tab();
+    expect(document.activeElement).toBe(focusable[0]);
+
+    // Shift+Tab from the first element wraps back to the last.
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(focusable[focusable.length - 1]);
+  });
+
+  it('restores focus to the triggering element when closed', () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <div>
+          <button onClick={() => setOpen(true)}>Open</button>
+          <ContributionSuccessModal
+            open={open}
+            amount={50}
+            cycleId={3}
+            onClose={() => setOpen(false)}
+          />
+        </div>
+      );
+    }
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: /open/i });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
+    expect(document.activeElement).toBe(trigger);
   });
 });

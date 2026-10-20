@@ -1,9 +1,9 @@
+import AndroidIcon from '@mui/icons-material/Android';
+import AppleIcon from '@mui/icons-material/Apple';
+import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
+import { Box, Typography, Stack, Button, Card, CardContent } from '@mui/material';
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Typography, Stack, Button, Card, CardContent } from '@mui/material';
-import AppleIcon from '@mui/icons-material/Apple';
-import AndroidIcon from '@mui/icons-material/Android';
-import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
 
 /**
  * AppDownloadPage - Web fallback landing page for deep links
@@ -83,7 +83,8 @@ const AppDownloadPage: React.FC = () => {
           </Typography>
 
           <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-            You've been invited to join a savings group! Get the best experience with our mobile app.
+            You've been invited to join a savings group! Get the best experience with our mobile
+            app.
           </Typography>
 
           {/* App Store Buttons */}
@@ -126,20 +127,12 @@ const AppDownloadPage: React.FC = () => {
           </Stack>
 
           {/* Divider */}
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: 'block', my: 2 }}
-          >
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', my: 2 }}>
             OR
           </Typography>
 
           {/* Web Fallback */}
-          <Button
-            variant="text"
-            onClick={handleContinueInBrowser}
-            sx={{ textTransform: 'none' }}
-          >
+          <Button variant="text" onClick={handleContinueInBrowser} sx={{ textTransform: 'none' }}>
             Continue in browser
           </Button>
         </CardContent>

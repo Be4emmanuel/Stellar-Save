@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi } from 'vitest';
+
 import { WalletButton } from '../components/WalletButton';
 import * as useWalletHook from '../hooks/useWallet';
 
@@ -13,9 +14,13 @@ describe('WalletButton', () => {
       activeAddress: null,
       connect: vi.fn(),
       disconnect: vi.fn(),
-    } as any);
+    } as never);
 
-    render(<MemoryRouter><WalletButton /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <WalletButton />
+      </MemoryRouter>
+    );
     expect(screen.getByText('Connect Wallet')).toBeInTheDocument();
   });
 
@@ -25,9 +30,13 @@ describe('WalletButton', () => {
       activeAddress: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890',
       connect: vi.fn(),
       disconnect: vi.fn(),
-    } as any);
+    } as never);
 
-    render(<MemoryRouter><WalletButton /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <WalletButton />
+      </MemoryRouter>
+    );
     expect(screen.getByText(/GABCDE...7890/)).toBeInTheDocument();
   });
 });

@@ -6,25 +6,32 @@
  * Run:
  *   k6 run backend/tests/load/groups.test.js
  */
-import http from 'k6/http';
 import { check, sleep, group } from 'k6';
-import { Trend, Rate } from 'k6/metrics';
+import http from 'k6/http';
+import { Counter, Trend, Rate } from 'k6/metrics';
+
 import { BASE_URL, loadOptions } from '../../tests/load/config.js';
 
 // ── Custom metrics ────────────────────────────────────────────────────────────
 const groupsListDuration = new Trend('groups_list_duration', true);
 const groupDetailDuration = new Trend('group_detail_duration', true);
 const errorRate = new Rate('groups_errors');
+const groupRequestOps = new Counter('group_request_ops');
 
 // ── Options ───────────────────────────────────────────────────────────────────
-export const options = loadOptions;
-
-const HEADERS = { 'Content-Type': 'application/json' };
+export const options = {
+  ...loadOptions,
+  thresholds: {
+    ...loadOptions.thresholds,
+    group_request_ops: ['rate>10'],
+  },
+};
 
 // ── Test scenarios ────────────────────────────────────────────────────────────
 export default function () {
   group('list groups', () => {
     const res = http.get(`${BASE_URL}/api/v1/groups`);
+    groupRequestOps.add(1);
     groupsListDuration.add(res.timings.duration);
     const ok = check(res, {
       'groups status 200': (r) => r.status === 200,
@@ -39,6 +46,7 @@ export default function () {
     const currencies = ['XLM', 'USDC', 'EURC'];
     const currency = currencies[Math.floor(Math.random() * currencies.length)];
     const res = http.get(`${BASE_URL}/api/v1/groups?currency=${currency}`);
+    groupRequestOps.add(1);
     groupsListDuration.add(res.timings.duration);
     const ok = check(res, {
       'filtered groups status 200': (r) => r.status === 200,
@@ -53,6 +61,7 @@ export default function () {
     const queries = ['savings', 'circle', 'pool', 'community'];
     const q = queries[Math.floor(Math.random() * queries.length)];
     const res = http.get(`${BASE_URL}/api/v1/groups?search=${q}`);
+    groupRequestOps.add(1);
     groupsListDuration.add(res.timings.duration);
     const ok = check(res, {
       'search groups status 200': (r) => r.status === 200,
@@ -66,11 +75,13 @@ export default function () {
   group('get group detail', () => {
     // First get a list to get a valid group ID
     const listRes = http.get(`${BASE_URL}/api/v1/groups`);
+    groupRequestOps.add(1);
     if (listRes.status === 200) {
       const groups = listRes.json();
       if (groups.length > 0) {
         const groupId = groups[0].id;
         const res = http.get(`${BASE_URL}/api/v1/groups/${groupId}`);
+        groupRequestOps.add(1);
         groupDetailDuration.add(res.timings.duration);
         const ok = check(res, {
           'group detail status 200': (r) => r.status === 200,

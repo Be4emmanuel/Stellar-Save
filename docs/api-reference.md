@@ -4,7 +4,7 @@
 **Contract:** StellarSaveContract  
 **Platform:** Stellar Soroban
 
-> This document is supplemented by [Contract API Reference](contract-api-reference.md), which covers all public helper types and functions in `group.rs`, `contribution.rs`, and `payout.rs`.
+> This document is supplemented by [Contract API Reference](contract-api-reference.md), which covers all public helper types and functions in `group.rs`, `contribution.rs`, and `payout.rs`. Looking for the backend REST/HTTP API instead of the on-chain contract API? See the [Public API Reference](api/interactive-api-reference.md).
 
 ## Table of Contents
 

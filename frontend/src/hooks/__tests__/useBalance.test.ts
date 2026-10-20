@@ -1,28 +1,33 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useBalance } from '../useBalance';
 
-const loadAccount = vi.fn();
+// Use the shared mock — no live Horizon calls in unit tests.
+// See frontend/src/__mocks__/@stellar/stellar-sdk.ts for the full stub surface.
+vi.mock('@stellar/stellar-sdk');
 
-vi.mock('@stellar/stellar-sdk', () => ({
-  Horizon: {
-    Server: vi.fn().mockImplementation(() => ({
-      loadAccount: (...args: unknown[]) => loadAccount(...args),
-    })),
-  },
-}));
+// This spy is wired into the shared Horizon.Server mock in beforeEach so that
+// individual tests can configure return values without touching the full mock factory.
+const loadAccount = vi.fn();
 
 vi.mock('../useWallet', () => ({
   useWallet: () => ({ activeAddress: 'GABC...TESTADDRESS', network: 'TESTNET' }),
 }));
 
 describe('useBalance regression: single polling path', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     loadAccount.mockReset();
     loadAccount.mockResolvedValue({
       balances: [{ asset_type: 'native', balance: '100.0000000' }],
     });
+    // Wire the shared Horizon.Server mock to use our local loadAccount spy,
+    // so tests can assert on call counts and configure return values.
+    const { Horizon } = await import('@stellar/stellar-sdk');
+    (Horizon.Server as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      loadAccount: (...args: unknown[]) => loadAccount(...args),
+    }));
   });
 
   afterEach(() => {

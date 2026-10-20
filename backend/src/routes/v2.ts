@@ -1,11 +1,19 @@
-import { Router, Request, Response } from 'express';
-import { V1Services } from './v1';
 import { randomBytes } from 'crypto';
 
+import { Router } from 'express';
+
+import { config } from '../config';
+import { AppError } from '../lib/errors';
+import { parseOffsetParams, paginateArray } from '../lib/pagination';
+import { logger } from '../logger';
+import { ValidationMiddleware } from '../middleware/validation';
+import { groupInvitationSchema } from '../middleware/validation.schemas';
 import { notificationService } from '../notification_service';
 import { prisma } from '../prisma_client';
-import { logger } from '../logger';
-import { config } from '../config';
+import { readinessCheckCache } from '../redis';
+
+import type { V1Services } from './v1';
+import type { Request, Response, NextFunction } from 'express';
 
 /**
  * Transforms a v1 response shape into v2 shape.
@@ -21,18 +29,13 @@ export function createV2Router(services: V1Services): Router {
   const router = Router();
   const { engine, backupService } = services;
 
-  // Health — v2 adds uptime and pool metrics
+  // Health — v2 adds uptime
   router.get('/health', (_req: Request, res: Response) => {
     res.json(
       migrateV1ToV2({
         status: 'ok',
         version: 'v2',
         uptime: process.uptime(),
-        responseTimeMs: 0,
-        dependencies: {
-          database: { up: true },
-          horizon: { up: true },
-        },
       })
     );
   });
@@ -41,20 +44,21 @@ export function createV2Router(services: V1Services): Router {
   router.get('/ready', async (_req: Request, res: Response) => {
     const start = Date.now();
 
-    const [database, horizon] = await Promise.all([
+    const [database, horizon, cache] = await Promise.all([
       services.eventIndexer.readinessCheckDatabase(),
       services.eventIndexer.readinessCheckHorizon(),
+      readinessCheckCache(),
     ]);
 
     const responseTimeMs = Date.now() - start;
-    const up = database.up && horizon.up;
+    const up = database.up && horizon.up && cache.up;
 
     res.status(up ? 200 : 503).json(
       migrateV1ToV2({
         status: up ? 'ready' : 'not_ready',
         version: 'v2',
         responseTimeMs,
-        dependencies: { database, horizon },
+        dependencies: { database, horizon, cache },
       })
     );
   });
@@ -68,86 +72,86 @@ export function createV2Router(services: V1Services): Router {
 
   // Group invitation email
   // POST /api/groups/:groupId/invite
-  router.post('/groups/:groupId/invite', async (req: Request, res: Response) => {
-    try {
-      const { groupId } = req.params;
-      const { email } = req.body as { email?: string };
+  router.post(
+    '/groups/:groupId/invite',
+    ValidationMiddleware.validateBody(groupInvitationSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { groupId, email } = req.body;
 
-      if (!groupId) return res.status(400).json(migrateV1ToV2({ error: 'groupId is required' }));
-      if (!email || typeof email !== 'string')
-        return res.status(400).json(migrateV1ToV2({ error: 'email is required' }));
+        // Generate token for join link
+        const joinToken = randomBytes(32).toString('hex');
 
-      // Generate token for join link
-      const joinToken = randomBytes(32).toString('hex');
+        // Persist invitation in DB
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const invitation = await (prisma as any).groupInvitation.create({
+          data: {
+            groupId,
+            recipientEmail: email,
+            joinToken,
+            status: 'sent',
+          },
+        });
 
-      // Persist invitation in DB
-      const invitation = await (prisma as any).groupInvitation.create({
-        data: {
-          groupId,
-          recipientEmail: email,
-          joinToken,
-          status: 'sent',
-        },
-      });
+        const frontendUrl = config.urls.frontend;
+        const joinLink = `${frontendUrl}/groups/join?token=${joinToken}`;
 
-      const frontendUrl = config.urls.frontend;
-      const joinLink = `${frontendUrl}/groups/join?token=${joinToken}`;
+        const groupName = `Group ${groupId}`; // TODO: fetch actual group name if available
+        const creatorUserId = 'unknown'; // TODO: extract from auth context
 
-      const groupName = `Group ${groupId}`; // TODO: fetch actual group name if available
-      const creatorUserId = 'unknown'; // TODO: extract from auth context
+        // Ensure a template exists in the system; use a dedicated template key.
+        const templateKey = 'email_group_invitation';
+        const subject = 'You are invited to join {{groupName}}';
 
-      // Ensure a template exists in the system; use a dedicated template key.
-      const templateKey = 'email_group_invitation';
-      const subject = 'You are invited to join {{groupName}}';
-
-      await notificationService.sendEmail(
-        email,
-        templateKey,
-        {
+        const emailData = {
           userName: email,
           groupName,
           joinLink,
           creatorUserId,
-        } as any,
-        subject.replace('{{groupName}}', groupName)
-      );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any;
 
-      res.status(201).json(
-        migrateV1ToV2({
-          invitationId: invitation.id,
-          status: 'sent',
-          joinLink,
-        })
-      );
-    } catch (err: any) {
-      logger.error('Failed to send group invitation', { error: err?.message || String(err) });
-      res.status(500).json(migrateV1ToV2({ error: 'Failed to send invitation' }));
+        await notificationService.sendEmail(
+          email,
+          templateKey,
+          emailData,
+          subject.replace('{{groupName}}', groupName)
+        );
+
+        res.status(201).json(
+          migrateV1ToV2({
+            invitationId: invitation.id,
+            status: 'sent',
+            joinLink,
+          })
+        );
+      } catch (err: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const error = err as any;
+        logger.error('Failed to send group invitation', {
+          error: error?.message || String(err),
+        });
+        next(new AppError('GROUP_INVITATION_FAILED', 'Failed to send invitation', 500));
+      }
     }
-  });
+  );
 
-  // Backup list — v2 adds pagination
+  // Backup list — v2 now uses shared pagination utility with offset/limit
   router.get('/backup', (req: Request, res: Response) => {
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
-    const all = backupService.listJobs();
-    const start = (page - 1) * limit;
-    res.json(
-      migrateV1ToV2({
-        data: all.slice(start, start + limit),
-        total: all.length,
-        page,
-        limit,
-      })
-    );
+    const pageParams = parseOffsetParams(req.query, { limit: 20 });
+    const allJobs = backupService.listJobs();
+    const result = paginateArray(allJobs, pageParams);
+    res.json(migrateV1ToV2(result));
   });
 
   // All other v2 routes are stubs — return 501 with migration hint
-  router.use((req: Request, res: Response) => {
-    res.status(501).json({
-      error: 'Not implemented in v2 yet',
-      hint: `Try the v1 equivalent: /api/v1${req.path}`,
-      apiVersion: 'v2',
-    });
+  router.use((req: Request, res: Response, next: NextFunction) => {
+    next(
+      new AppError('NOT_IMPLEMENTED', 'Not implemented in v2 yet', 501, {
+        hint: `Try the v1 equivalent: /api/v1${req.path}`,
+        apiVersion: 'v2',
+      })
+    );
   });
 
   return router;
