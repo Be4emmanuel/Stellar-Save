@@ -6,7 +6,33 @@ set -euo pipefail
 
 PASS=0; FAIL=0
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+HISTORY="$(dirname "$0")/../deployment-records/size_history.json"
+REPORT="$(dirname "$0")/../deployment-records/size_report.md"
+HISTORY_EXISTED=false
+REPORT_EXISTED=false
+if [ -f "$HISTORY" ]; then
+  cp "$HISTORY" "$TMP/size_history.original.json"
+  HISTORY_EXISTED=true
+fi
+if [ -f "$REPORT" ]; then
+  cp "$REPORT" "$TMP/size_report.original.md"
+  REPORT_EXISTED=true
+fi
+
+cleanup() {
+  if [ "$HISTORY_EXISTED" = true ]; then
+    cp "$TMP/size_history.original.json" "$HISTORY"
+  else
+    rm -f "$HISTORY"
+  fi
+  if [ "$REPORT_EXISTED" = true ]; then
+    cp "$TMP/size_report.original.md" "$REPORT"
+  else
+    rm -f "$REPORT"
+  fi
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
 
 ok()   { echo "  ✅  $*"; ((PASS++)) || true; }
 fail() { echo "  ❌  $*"; ((FAIL++)) || true; }
@@ -76,7 +102,6 @@ WARN_THRESHOLD_PCT=80 \
 GIT_SHA=abc123 \
 bash "$(dirname "$0")/../scripts/check_contract_size.sh" &>/dev/null
 
-HISTORY="$(dirname "$0")/../deployment-records/size_history.json"
 if [ -f "$HISTORY" ]; then
   SHA_IN_HISTORY=$(python3 -c "
 import json
@@ -95,7 +120,6 @@ echo "── Report generation ────────────────�
 make_wasm $(( 60 * 1024 ))
 run_check 100 80 &>/dev/null || true
 
-REPORT="$(dirname "$0")/../deployment-records/size_report.md"
 if [ -f "$REPORT" ]; then
   ok "size_report.md was created"
   assert_contains "report contains size table" "Size" "$(cat "$REPORT")"
