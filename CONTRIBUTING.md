@@ -123,6 +123,10 @@ corepack enable
 pnpm install
 ```
 
+The repository uses **pnpm only**. `pnpm-lock.yaml` at the root is the single
+source of truth for resolved versions — do not run `npm install` or `yarn` at
+the root and do not commit a root `package-lock.json` or `yarn.lock`.
+
 ### Environment configuration
 
 ```bash
@@ -394,11 +398,11 @@ The hook is installed by Husky and lives at `.husky/commit-msg`. It runs `commit
 
 ```bash
 # Install root dependencies (includes husky + commitlint)
-npm install
+pnpm install
 # Husky installs the git hook automatically via the "prepare" script
 ```
 
-If the hook is not firing, re-run `npx husky` from the repo root.
+If the hook is not firing, re-run `pnpm exec husky` from the repo root.
 
 **Verify the hook locally:**
 
@@ -682,6 +686,31 @@ npm test -- --coverage
 - ✅ Test both success and failure paths
 - ✅ Use descriptive test names: `test_contribute_with_insufficient_balance` not `test_1`
 
+### Snapshot Tests
+
+The repository keeps two kinds of committed snapshots:
+
+| Suite                     | Location                                     | Written by                         |
+| ------------------------- | -------------------------------------------- | ---------------------------------- |
+| Frontend (Vitest)         | `frontend/src/test/__snapshots__/*.snap`     | `toMatchSnapshot()`                |
+| Smart contracts (Soroban) | `contracts/<crate>/test_snapshots/**/*.json` | every test that creates an `Env`   |
+
+Snapshots are only useful if a human reads every change to them. Rules:
+
+- **Never run `-u` / `--update` blindly.** Update snapshots only for the tests
+  your change intentionally affects, e.g.
+  `cd frontend && pnpm vitest run src/test/GroupDetailPage.snapshot.test.tsx -u`.
+- **Explain every snapshot change in the PR description** — which snapshot
+  changed and why the new output is correct. Reviewers must reject PRs whose
+  snapshot diffs are unexplained.
+- **Delete obsolete snapshots in the same PR** that removes or renames a test.
+  - Frontend: Vitest prints `obsolete` entries in its summary; remove them with
+    `pnpm vitest run -u` scoped to the affected file, then review the diff.
+  - Contracts: Soroban does not prune `test_snapshots/` — delete the JSON
+    files whose module path / test name no longer exists.
+- **Keep snapshots small** — snapshot the component under test, not the whole
+  page tree, so diffs stay reviewable.
+
 ### CI/CD Pipeline
 
 All tests run automatically on:
@@ -804,6 +833,7 @@ Step-by-step instructions to verify the changes
 - [ ] Code follows style guidelines
 - [ ] Documentation updated
 - [ ] No breaking changes (or documented)
+- [ ] Every snapshot change is explained in the description, and obsolete snapshots are deleted (see [Snapshot Tests](#snapshot-tests))
 ```
 
 ### PR Process Steps
