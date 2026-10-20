@@ -32,6 +32,35 @@ for WEIGHT in "${STEPS[@]}"; do
   echo "── Setting canary weight to ${WEIGHT}% ──────────────────────────────────"
   bash scripts/canary_traffic.sh --set-weight "$WEIGHT"
 
+  # ─── Smoke-test gate ─────────────────────────────────────────────────────
+  # Read the canary contract ID from the registry and run the full smoke-test
+  # suite before waiting and before the lightweight health check.
+  CANARY_ID=$(python3 -c "
+import json
+try:
+    d = json.load(open('$REGISTRY'))
+    print(d.get('canary_contract_id', ''))
+except Exception:
+    print('')
+" 2>/dev/null || echo "")
+
+  if [ -n "$CANARY_ID" ]; then
+    echo "── Smoke-test gate at ${WEIGHT}% ─────────────────────────────────────────"
+    if ! CONTRACT_ID="$CANARY_ID" \
+        STELLAR_NETWORK="$STELLAR_NETWORK" \
+        STELLAR_RPC_URL="$STELLAR_RPC_URL" \
+        AUTO_ROLLBACK=0 \
+        bash scripts/canary_smoke_test.sh; then
+      echo
+      echo "🚨 Smoke-test gate failed at ${WEIGHT}% — initiating rollback"
+      ROLLBACK_REASON="smoke_test_failed_at_${WEIGHT}_percent" \
+        bash scripts/canary_rollback.sh
+      exit 1
+    fi
+  else
+    echo "   ⚠️  No canary contract ID found in registry — skipping smoke-test gate"
+  fi
+
   if [ "$WEIGHT" -lt 100 ]; then
     echo "   Waiting ${STEP_INTERVAL}s before health check…"
     sleep "$STEP_INTERVAL"

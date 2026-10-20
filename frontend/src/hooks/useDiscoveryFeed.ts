@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchGroups } from '../utils/groupApi';
-import type { GroupFilters, PublicGroup, UseGroupsReturn } from '../types/group';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { STALE_TIME } from '../lib/queryClient';
+import { queryKeys } from '../lib/queryKeys';
 import { DEFAULT_GROUP_FILTERS } from '../types/group';
+import { fetchGroups } from '../utils/groupApi';
+
+import type { GroupFilters, PublicGroup } from '../types/group';
 
 interface UseDiscoveryFeedOptions {
   initialFilters?: Partial<GroupFilters>;
@@ -23,6 +28,7 @@ interface UseDiscoveryFeedReturn {
 }
 
 function normalizeNumberInput(value: string): number | null {
+  if (value.trim() === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -100,56 +106,54 @@ function recommendGroups(groups: PublicGroup[], filters: GroupFilters): PublicGr
     .map((entry) => entry.group);
 }
 
+/**
+ * Discovery feed of recommended groups — sources its raw group list from
+ * the shared React Query cache (queryKeys.groups.all()) instead of its own
+ * ad-hoc useState/useEffect fetch, so it no longer issues a second,
+ * independent network call for data other group-list consumers
+ * (useGroups()) may have already fetched/cached.
+ *
+ * Recommendation scoring/filtering and "load more" pagination stay
+ * client-side and local to this hook, since they're specific to the
+ * discovery UX (infinite scroll over a ranked list) rather than the
+ * paginated filter UI `useGroups()` powers.
+ */
 export function useDiscoveryFeed(options: UseDiscoveryFeedOptions = {}): UseDiscoveryFeedReturn {
   const { initialFilters, initialPageSize = 8 } = options;
-  const [rawGroups, setRawGroups] = useState<PublicGroup[]>([]);
+  const queryClient = useQueryClient();
+
   const [filters, setFiltersState] = useState<GroupFilters>({
     ...DEFAULT_GROUP_FILTERS,
     ...initialFilters,
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(initialPageSize);
 
-  const fetchIdRef = useRef(0);
+  const {
+    data: rawGroups = [],
+    isLoading,
+    error: queryError,
+  } = useQuery<PublicGroup[], Error>({
+    queryKey: queryKeys.groups.all(),
+    queryFn: () => fetchGroups(),
+    staleTime: STALE_TIME.GROUP_STATE,
+    retry: false,
+  });
 
-  const loadGroups = useCallback(async (bust = false) => {
-    const fetchId = ++fetchIdRef.current;
-    setError(null);
-    setIsLoading(true);
+  const error = queryError
+    ? queryError.message || 'Failed to load groups. Please try again.'
+    : null;
 
-    try {
-      const groups = await fetchGroups();
-      if (fetchId !== fetchIdRef.current) return;
-      setRawGroups(groups);
-    } catch (err) {
-      if (fetchId !== fetchIdRef.current) return;
-      setError(
-        err instanceof Error && err.message
-          ? err.message
-          : 'Failed to load group recommendations. Please try again.',
-      );
-    } finally {
-      if (fetchId === fetchIdRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.groups.all() });
+  }, [queryClient]);
 
-  useEffect(() => {
-    void loadGroups();
-  }, [loadGroups]);
-
-  const recommendations = useMemo(
-    () => recommendGroups(rawGroups, filters),
-    [rawGroups, filters],
-  );
+  const recommendations = useMemo(() => recommendGroups(rawGroups, filters), [rawGroups, filters]);
 
   const totalCount = recommendations.length;
   const hasMore = visibleCount < totalCount;
   const visibleRecommendations = useMemo(
     () => recommendations.slice(0, visibleCount),
-    [recommendations, visibleCount],
+    [recommendations, visibleCount]
   );
 
   useEffect(() => {
@@ -163,10 +167,6 @@ export function useDiscoveryFeed(options: UseDiscoveryFeedOptions = {}): UseDisc
   const clearFilters = useCallback(() => {
     setFiltersState(DEFAULT_GROUP_FILTERS);
   }, []);
-
-  const refresh = useCallback(() => {
-    void loadGroups(true);
-  }, [loadGroups]);
 
   const loadMore = useCallback(() => {
     setVisibleCount((current) => Math.min(current + initialPageSize, totalCount));

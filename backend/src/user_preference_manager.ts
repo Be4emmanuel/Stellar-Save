@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import { logger } from './logger';
 
-const prisma = new PrismaClient();
+import { logger } from './logger';
+import { notificationPreferenceRepository } from './modules/notifications/notification-preference.repository';
 
 /**
  * User Preference Manager Service
@@ -13,23 +12,19 @@ export class UserPreferenceManager {
    * Get or create user preferences
    */
   static async getOrCreatePreferences(userId: string) {
-    let preferences = await prisma.notificationPreference.findUnique({
-      where: { userId },
-    });
+    let preferences = await notificationPreferenceRepository.findByUserId(userId);
 
     if (!preferences) {
       // Create default preferences for new user
-      preferences = await prisma.notificationPreference.create({
-        data: {
-          userId,
-          emailNotifications: true,
-          pushNotifications: true,
-          contributionReminders: true,
-          groupUpdates: true,
-          payoutNotifications: true,
-          emailFrequency: 'immediate',
-          unsubscribeToken: crypto.randomUUID(),
-        },
+      preferences = await notificationPreferenceRepository.create({
+        userId,
+        emailNotifications: true,
+        pushNotifications: true,
+        contributionReminders: true,
+        groupUpdates: true,
+        payoutNotifications: true,
+        emailFrequency: 'immediate',
+        unsubscribeToken: crypto.randomUUID(),
       });
 
       logger.info(`Created default preferences for user: ${userId}`);
@@ -52,10 +47,7 @@ export class UserPreferenceManager {
       emailFrequency?: 'immediate' | 'daily' | 'weekly' | 'never';
     }
   ) {
-    const preferences = await prisma.notificationPreference.update({
-      where: { userId },
-      data: updates,
-    });
+    const preferences = await notificationPreferenceRepository.updateByUserId(userId, updates);
 
     logger.info(`Updated preferences for user: ${userId}`, updates);
     return preferences;
@@ -66,9 +58,7 @@ export class UserPreferenceManager {
    * Used for one-click unsubscribe links
    */
   static async getPreferencesByUnsubscribeToken(token: string) {
-    return await prisma.notificationPreference.findUnique({
-      where: { unsubscribeToken: token },
-    });
+    return await notificationPreferenceRepository.findByUnsubscribeToken(token);
   }
 
   /**
@@ -81,13 +71,10 @@ export class UserPreferenceManager {
       throw new Error('Invalid unsubscribe token');
     }
 
-    return await prisma.notificationPreference.update({
-      where: { id: preferences.id },
-      data: {
-        emailNotifications: false,
-        pushNotifications: false,
-        emailFrequency: 'never',
-      },
+    return await notificationPreferenceRepository.updateById(preferences.id, {
+      emailNotifications: false,
+      pushNotifications: false,
+      emailFrequency: 'never',
     });
   }
 
@@ -95,13 +82,10 @@ export class UserPreferenceManager {
    * Re-subscribe user to notifications
    */
   static async resubscribeUser(userId: string) {
-    return await prisma.notificationPreference.update({
-      where: { userId },
-      data: {
-        emailNotifications: true,
-        pushNotifications: true,
-        emailFrequency: 'immediate',
-      },
+    return await notificationPreferenceRepository.updateByUserId(userId, {
+      emailNotifications: true,
+      pushNotifications: true,
+      emailFrequency: 'immediate',
     });
   }
 
@@ -149,26 +133,15 @@ export class UserPreferenceManager {
    * Get users who should receive digest emails
    */
   static async getUsersForDigest(frequency: 'daily' | 'weekly'): Promise<string[]> {
-    const preferences = await prisma.notificationPreference.findMany({
-      where: {
-        emailNotifications: true,
-        emailFrequency: frequency,
-      },
-      select: { userId: true },
-    });
-
-    return preferences.map((p) => p.userId);
+    return await notificationPreferenceRepository.userIdsForDigest(frequency);
   }
 
   /**
    * Regenerate unsubscribe token for a user
    */
   static async regenerateUnsubscribeToken(userId: string) {
-    return await prisma.notificationPreference.update({
-      where: { userId },
-      data: {
-        unsubscribeToken: crypto.randomUUID(),
-      },
+    return await notificationPreferenceRepository.updateByUserId(userId, {
+      unsubscribeToken: crypto.randomUUID(),
     });
   }
 
@@ -176,15 +149,8 @@ export class UserPreferenceManager {
    * Register device token for push notifications
    */
   static async registerDeviceToken(userId: string, deviceToken: string, platform: string) {
-    // In a full implementation, you would store device tokens in a separate table
-    // For now, this is a placeholder for device management
+    // TODO: persist via Prisma once the DeviceToken model is added to the schema.
     logger.info(`Device token registered for user: ${userId}`, { platform });
-
-    // In production:
-    // return await prisma.deviceToken.create({
-    //   data: { userId, deviceToken, platform, active: true },
-    // });
-
     return { userId, deviceToken, platform, registeredAt: new Date() };
   }
 
@@ -193,12 +159,7 @@ export class UserPreferenceManager {
    */
   static async unregisterDeviceToken(userId: string, deviceToken: string) {
     logger.info(`Device token unregistered for user: ${userId}`);
-
-    // In production:
-    // return await prisma.deviceToken.delete({
-    //   where: { deviceToken, userId },
-    // });
-
+    // TODO: persist via Prisma once the DeviceToken model is added to the schema.
     return { userId, deviceToken, unregisteredAt: new Date() };
   }
 
@@ -206,13 +167,7 @@ export class UserPreferenceManager {
    * Get all device tokens for a user
    */
   static async getUserDeviceTokens(userId: string): Promise<string[]> {
-    // In production:
-    // const tokens = await prisma.deviceToken.findMany({
-    //   where: { userId, active: true },
-    //   select: { deviceToken: true },
-    // });
-    // return tokens.map((t) => t.deviceToken);
-
+    // TODO: query via Prisma once the DeviceToken model is added to the schema.
     logger.info(`Retrieved device tokens for user: ${userId}`);
     return [];
   }
@@ -221,18 +176,11 @@ export class UserPreferenceManager {
    * Get aggregate notification preferences statistics
    */
   static async getPreferenceStats() {
-    const total = await prisma.notificationPreference.count();
-    const emailEnabled = await prisma.notificationPreference.count({
-      where: { emailNotifications: true },
-    });
-    const pushEnabled = await prisma.notificationPreference.count({
-      where: { pushNotifications: true },
-    });
+    const total = await notificationPreferenceRepository.count();
+    const emailEnabled = await notificationPreferenceRepository.count({ emailNotifications: true });
+    const pushEnabled = await notificationPreferenceRepository.count({ pushNotifications: true });
 
-    const byFrequency = await prisma.notificationPreference.groupBy({
-      by: ['emailFrequency'],
-      _count: true,
-    });
+    const byFrequency = await notificationPreferenceRepository.countByEmailFrequency();
 
     return {
       total,
@@ -241,7 +189,7 @@ export class UserPreferenceManager {
       emailEnabledPercent: total > 0 ? ((emailEnabled / total) * 100).toFixed(2) : 0,
       pushEnabledPercent: total > 0 ? ((pushEnabled / total) * 100).toFixed(2) : 0,
       byFrequency: Object.fromEntries(
-        byFrequency.map((group: any) => [group.emailFrequency, group._count])
+        byFrequency.map((group: { emailFrequency: string; _count: number }) => [group.emailFrequency, group._count])
       ),
     };
   }
@@ -257,17 +205,10 @@ export class UserPreferenceManager {
       emailFrequency?: string;
     }
   ) {
-    const result = await prisma.notificationPreference.updateMany({
-      where: {
-        userId: {
-          in: userIds,
-        },
-      },
-      data: updates,
-    });
+    const count = await notificationPreferenceRepository.updateManyByUserIds(userIds, updates);
 
-    logger.info(`Batch updated ${result.count} user preferences`);
-    return result;
+    logger.info(`Batch updated ${count} user preferences`);
+    return { count };
   }
 }
 

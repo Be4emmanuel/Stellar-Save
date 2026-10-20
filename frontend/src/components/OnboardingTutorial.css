@@ -1,7 +1,7 @@
 .onboarding-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--color-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9,12 +9,12 @@
 }
 
 .onboarding-modal {
-  background: var(--color-surface, #fff);
+  background: var(--color-surface);
   border-radius: 12px;
   padding: 2rem;
   max-width: 480px;
   width: 90%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px var(--color-shadow);
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -28,22 +28,22 @@
 
 .onboarding-step-count {
   font-size: 0.85rem;
-  color: var(--color-text-muted, #666);
+  color: var(--color-text-muted);
 }
 
 .onboarding-skip {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-text-muted, #666);
+  color: var(--color-text-muted);
   font-size: 0.9rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
 }
 
 .onboarding-skip:hover {
-  color: var(--color-text, #333);
-  background: var(--color-surface-hover, #f5f5f5);
+  color: var(--color-text);
+  background: var(--color-surface-hover);
 }
 
 .onboarding-body {
@@ -63,12 +63,12 @@
   font-size: 1.4rem;
   font-weight: 700;
   margin: 0;
-  color: var(--color-text, #1a1a1a);
+  color: var(--color-text);
 }
 
 .onboarding-description {
   font-size: 1rem;
-  color: var(--color-text-secondary, #555);
+  color: var(--color-text-secondary);
   line-height: 1.6;
   margin: 0;
 }
@@ -84,14 +84,14 @@
   height: 10px;
   border-radius: 50%;
   border: none;
-  background: var(--color-border, #ddd);
+  background: var(--color-border);
   cursor: pointer;
   padding: 0;
   transition: background 0.2s;
 }
 
 .onboarding-dot--active {
-  background: var(--color-primary, #6366f1);
+  background: var(--color-primary);
 }
 
 .onboarding-footer {
@@ -117,7 +117,9 @@
 }
 
 .onboarding-btn--primary {
-  background: var(--color-primary, #6366f1);
+  background: var(--color-primary);
+  /* Fixed white text on a solid --color-primary fill — stays AA-compliant in both themes. */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list */
   color: #fff;
 }
 
@@ -126,10 +128,10 @@
 }
 
 .onboarding-btn--secondary {
-  background: var(--color-surface-hover, #f0f0f0);
-  color: var(--color-text, #333);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 .onboarding-btn--secondary:hover:not(:disabled) {
-  background: var(--color-border, #e0e0e0);
+  background: var(--color-border);
 }

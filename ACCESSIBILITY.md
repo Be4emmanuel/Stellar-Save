@@ -10,10 +10,15 @@ This document describes the automated accessibility testing suite for Stellar Sa
 
 | Tool | Purpose | Standard |
 |------|---------|----------|
+| [eslint-plugin-jsx-a11y](https://github.com/jsx-eslint/eslint-plugin-jsx-a11y) | Static ARIA/role/lint checks on `.tsx` at lint time | WCAG 2.1 A/AA (static subset) |
 | [jest-axe](https://github.com/nickcolley/jest-axe) | axe-core violations in Vitest component tests | WCAG 2.1 AA |
+| [@axe-core/playwright](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) | axe-core violations in real-browser route scans, filtered to `critical`/`serious` | WCAG 2.1 AA |
 | [Pa11y CI](https://github.com/pa11y/pa11y-ci) | Full-page scans against the built app | WCAG 2.1 AA |
 | [Lighthouse CI](https://github.com/GoogleChrome/lighthouse-ci) | Accessibility score audit per build | Lighthouse accessibility rules |
-| [@axe-core/react](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/react) | Runtime dev-mode warnings in the browser | WCAG 2.1 AA |
+
+> `jsx-a11y` runs as a lint-time ratchet: its rules are registered at `warn` so the
+> existing backlog is visible in `npm run lint` output without breaking the build.
+> Promote them to `error` once the warnings are cleared.
 
 ---
 
@@ -34,6 +39,28 @@ These tests live in `frontend/src/test/a11y.test.tsx` and cover:
 - **Pages:** `LandingPage`, `NotFoundPage`, `ErrorPage`, `SettingsPage`
 - **Keyboard navigation:** Tab order, arrow-key navigation in Tabs, Enter/Space on buttons, Escape to close modals
 - **Screen reader attributes:** `role`, `aria-label`, `aria-labelledby`, `aria-describedby`, `aria-live`, `aria-invalid`, `aria-selected`, `aria-current`
+
+`npm run test:a11y` and `npm run test:a11y:ci` also run the other axe-bearing suites, so
+the accessibility gate covers all of them rather than `a11y.test.tsx` alone:
+
+| Suite | Covers |
+|---|---|
+| `modal-a11y.test.tsx` | `JoinGroupModal`, `TemplatePreviewModal`, `SaveTemplateModal`, `TransactionDetailModal`, `WalletSelectModal`, focus trap + focus restore |
+| `page-a11y.test.tsx` | `ProfilePage`, `BrowseGroupsPage` |
+| `Dialog.test.tsx` | The shared `Dialog` primitive: labelling, Escape, focus trap, focus restore |
+| `ContributionSuccessModal.test.tsx` | `ContributionSuccessModal`: labelling + focus trap |
+| `OnboardingTutorial.test.tsx` | `OnboardingTutorial`: labelling + focus trap |
+
+### 1b. Browser route scans (requires a dev server)
+
+```bash
+cd frontend
+npm run test:a11y:e2e     # Playwright + @axe-core/playwright
+```
+
+`frontend/src/test/e2e/a11y.spec.ts` drives a real browser and fails on `critical` or
+`serious` axe violations for `/` and `/dashboard`. It is the only suite that applies a
+severity threshold rather than asserting zero violations of any severity.
 
 ### 2. Pa11y full-page scan (requires built app)
 

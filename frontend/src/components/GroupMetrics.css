@@ -6,7 +6,7 @@
 .group-metrics-header h4 {
   margin: 0 0 1rem 0;
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.87);
+  color: var(--color-text-primary);
 }
 
 .group-metrics-grid {
@@ -18,8 +18,8 @@
 .group-metric-item {
   padding: 1rem;
   border-radius: 8px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -27,7 +27,7 @@
 
 .group-metric-label {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -35,7 +35,7 @@
 .group-metric-value {
   font-size: 1.25rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text-primary);
 }
 
 .group-metric-trend {
@@ -44,28 +44,9 @@
 }
 
 .group-metric-trend-improving {
-  color: #22c55e;
+  color: var(--color-success);
 }
 
 .group-metric-trend-declining {
-  color: #ef4444;
-}
-
-@media (prefers-color-scheme: light) {
-  .group-metrics-header h4 {
-    color: rgba(0, 0, 0, 0.87);
-  }
-
-  .group-metric-item {
-    background-color: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.1);
-  }
-
-  .group-metric-label {
-    color: rgba(0, 0, 0, 0.6);
-  }
-
-  .group-metric-value {
-    color: rgba(0, 0, 0, 0.87);
-  }
+  color: var(--color-danger);
 }

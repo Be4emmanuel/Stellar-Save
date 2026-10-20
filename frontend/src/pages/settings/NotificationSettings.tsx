@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Stack,
   Typography,
@@ -8,9 +7,11 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
+import { useState } from 'react';
+
+import { useWallet } from '../../hooks/useWallet';
 import { AppCard, AppLayout } from '../../ui';
 import { AppButton } from '../../ui/components/AppButton';
-import { useWallet } from '../../hooks/useWallet';
 
 interface NotificationPrefs {
   emailNotifications: boolean;
@@ -34,8 +35,7 @@ export default function NotificationSettings() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const toggle = (key: keyof NotificationPrefs) =>
-    setPrefs((p) => ({ ...p, [key]: !p[key] }));
+  const toggle = (key: keyof NotificationPrefs) => setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
   const handleSave = async () => {
     if (!activeAddress) return;
@@ -111,8 +111,12 @@ export default function NotificationSettings() {
                 }
                 label={
                   <Stack spacing={0.25}>
-                    <Typography variant="body2" fontWeight={500}>{row.label}</Typography>
-                    <Typography variant="caption" color="text.secondary">{row.description}</Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {row.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {row.description}
+                    </Typography>
                   </Stack>
                 }
               />

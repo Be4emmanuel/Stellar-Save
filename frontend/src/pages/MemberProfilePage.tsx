@@ -15,8 +15,11 @@ import {
 import { AppLayout } from '../ui';
 import { UserStats } from '../components/UserStats';
 import { StreakDisplay } from '../components/StreakDisplay';
-import { Spinner } from '../components/Spinner';
+import { BadgeGallery } from '../components/BadgeGallery';
+import { LoadingState } from '../components/LoadingState';
+import { ErrorState } from '../components/ErrorState';
 import { useMemberProfile } from '../hooks/useMemberProfile';
+import { useMemberBadges } from '../hooks/useMemberBadges';
 import { useClipboard } from '../hooks/useClipboard';
 
 function ReputationBadge({ score }: { score: number }) {
@@ -39,6 +42,7 @@ function ReputationBadge({ score }: { score: number }) {
 export default function MemberProfilePage() {
   const { address } = useParams<{ address: string }>();
   const { profile, isLoading, error } = useMemberProfile(address);
+  const { badges, isLoading: badgesLoading, error: badgesError } = useMemberBadges(address);
   const { copy, copied } = useClipboard();
 
   const profileUrl = `${window.location.origin}/members/${address ?? ''}`;
@@ -55,13 +59,9 @@ export default function MemberProfilePage() {
       subtitle="Contribution history and reputation"
       footerText="Stellar Save — Built for transparent, on-chain savings"
     >
-      {isLoading && (
-        <Box sx={{ py: 8, textAlign: 'center' }}>
-          <Spinner size="lg" />
-        </Box>
-      )}
+      {isLoading && <LoadingState message="Loading member profile…" />}
 
-      {error && <Alert severity="error">{error}</Alert>}
+      {error && <ErrorState message={error} />}
 
       {!isLoading && !error && !profile && (
         <Alert severity="warning">Member not found.</Alert>
@@ -160,6 +160,16 @@ export default function MemberProfilePage() {
             <StreakDisplay
               currentStreak={profile.currentStreak}
               longestStreak={profile.longestStreak}
+            />
+          </Paper>
+
+          {/* ── Badge Gallery ── */}
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+            <BadgeGallery
+              badges={badges}
+              isLoading={badgesLoading}
+              error={badgesError}
+              walletAddress={address}
             />
           </Paper>
         </Stack>

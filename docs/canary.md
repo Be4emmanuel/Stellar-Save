@@ -48,6 +48,7 @@ step_interval_seconds = 300  # wait between steps
 | `canary_monitor.sh` | Run health probes, write metrics, exit 1 on breach |
 | `canary_rollback.sh` | Set canary weight to 0, restore stable routing |
 | `canary_promote.sh` | Step through weights, promote canary to stable |
+| `canary_smoke_test.sh` | Full smoke-test suite; blocks promotion if any test fails |
 
 ## Workflows
 
@@ -135,3 +136,60 @@ Automatic rollback fires when **either** condition is met:
 
 - Error rate ≥ `max_error_rate` % (after `min_sample_size` checks)
 - Consecutive failures ≥ `max_consecutive_failures`
+
+## Smoke-Test Gate
+
+`scripts/canary_smoke_test.sh` is a comprehensive automated suite that must
+pass before any canary promotion step executes. It runs automatically via
+`canary_promote.sh` and the `smoke-test` CI job in `canary.yml`.
+
+### What the suite checks
+
+| Group | Checks |
+|-------|--------|
+| RPC layer | Soroban RPC endpoint reachable |
+| Contract existence | Canary contract found on-chain |
+| Read-only contract | `get_group(0)` returns expected error, `get_total_groups` returns integer, `is_member` returns false/error |
+| Write-path (testnet) | `create_group` succeeds, `get_group` reads back the created group, `get_payout_schedule` returns without error |
+| Backend API | `GET /health → 200`, `GET /api/groups → 200 + valid JSON` |
+| Frontend | `GET / → 200` |
+
+Checks that cannot connect (API or frontend not deployed in the current
+environment) are logged as informational warnings, not failures.
+
+### Rollback trigger
+
+When any critical check fails, `ROLLBACK_TRIGGER` is set internally and
+`canary_rollback.sh` is invoked automatically (unless `AUTO_ROLLBACK=0`).
+This ensures the stable contract resumes full traffic immediately.
+
+### Running locally
+
+```bash
+# Minimum: contract + network
+CONTRACT_ID=<canary_contract_id> \
+STELLAR_NETWORK=testnet \
+STELLAR_RPC_URL=https://soroban-testnet.stellar.org \
+bash scripts/canary_smoke_test.sh
+
+# Full: with backend and frontend
+CONTRACT_ID=<canary_contract_id> \
+STELLAR_NETWORK=testnet \
+STELLAR_RPC_URL=https://soroban-testnet.stellar.org \
+API_URL=https://api-canary.stellar-save.app \
+FRONTEND_URL=https://canary.stellar-save.app \
+bash scripts/canary_smoke_test.sh
+
+# Disable automatic rollback (inspect only)
+AUTO_ROLLBACK=0 CONTRACT_ID=... STELLAR_NETWORK=testnet \
+STELLAR_RPC_URL=... bash scripts/canary_smoke_test.sh
+```
+
+### CI integration
+
+The `smoke-test` job in `.github/workflows/canary.yml` runs after
+`deploy-canary` for both `deploy` and `promote` actions. It reads the canary
+contract ID from `deployment-records/active.json` and calls the suite with the
+network-appropriate RPC and API URLs. If the suite exits non-zero, a
+`auto-rollback on smoke test failure` step immediately calls
+`canary_rollback.sh` before the workflow fails.

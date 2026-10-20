@@ -1,10 +1,16 @@
-import { Router, Request, Response } from 'express';
-import { NotificationService } from '../notification_service';
-import { PushNotificationService } from '../push_notification_service';
-import { WebPushService } from '../web_push_service';
-import { UserPreferenceManager } from '../user_preference_manager';
-import { NotificationTemplateManager } from '../notification_template_manager';
+import { Router } from 'express';
+
+import { config } from '../config';
+import { deviceTokenService } from '../device_token_service';
+import { AppError } from '../lib/errors';
 import { logger } from '../logger';
+import { NotificationService } from '../notification_service';
+import { NotificationTemplateManager } from '../notification_template_manager';
+import { PushNotificationService } from '../push_notification_service';
+import { UserPreferenceManager } from '../user_preference_manager';
+import { WebPushService } from '../web_push_service';
+
+import type { Request, Response, NextFunction } from 'express';
 
 /**
  * Notification Service Routes
@@ -22,7 +28,7 @@ export function createNotificationRouter(): Router {
    * GET /api/v1/notifications/preferences/:userId
    * Get user's notification preferences
    */
-  router.get('/preferences/:userId', async (req: Request, res: Response) => {
+  router.get('/preferences/:userId', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.params;
 
@@ -30,7 +36,7 @@ export function createNotificationRouter(): Router {
       res.json(preferences);
     } catch (error) {
       logger.error('Error fetching preferences', { error: String(error) });
-      res.status(500).json({ error: 'Failed to fetch preferences' });
+      next(new AppError('PREFERENCES_FETCH_FAILED', 'Failed to fetch preferences', 500));
     }
   });
 
@@ -38,7 +44,7 @@ export function createNotificationRouter(): Router {
    * PUT /api/v1/notifications/preferences/:userId
    * Update user's notification preferences
    */
-  router.put('/preferences/:userId', async (req: Request, res: Response) => {
+  router.put('/preferences/:userId', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.params;
       const {
@@ -52,7 +58,7 @@ export function createNotificationRouter(): Router {
 
       // Validate frequency
       if (emailFrequency && !['immediate', 'daily', 'weekly', 'never'].includes(emailFrequency)) {
-        return res.status(400).json({ error: 'Invalid emailFrequency' });
+        return next(new AppError('INVALID_EMAIL_FREQUENCY', 'Invalid emailFrequency', 400));
       }
 
       const updated = await UserPreferenceManager.updatePreferences(userId, {
@@ -67,7 +73,7 @@ export function createNotificationRouter(): Router {
       res.json({ message: 'Preferences updated', preferences: updated });
     } catch (error) {
       logger.error('Error updating preferences', { error: String(error) });
-      res.status(500).json({ error: 'Failed to update preferences' });
+      next(new AppError('PREFERENCES_UPDATE_FAILED', 'Failed to update preferences', 500));
     }
   });
 
@@ -75,13 +81,13 @@ export function createNotificationRouter(): Router {
    * GET /api/v1/notifications/preferences/stats
    * Get aggregate preference statistics
    */
-  router.get('/preferences/stats', async (req: Request, res: Response) => {
+  router.get('/preferences/stats', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const stats = await UserPreferenceManager.getPreferenceStats();
       res.json(stats);
     } catch (error) {
       logger.error('Error fetching preference stats', { error: String(error) });
-      res.status(500).json({ error: 'Failed to fetch statistics' });
+      next(new AppError('PREFERENCE_STATS_FETCH_FAILED', 'Failed to fetch statistics', 500));
     }
   });
 
@@ -89,12 +95,14 @@ export function createNotificationRouter(): Router {
    * POST /api/v1/notifications/device-token
    * Register device token for push notifications
    */
-  router.post('/device-token', async (req: Request, res: Response) => {
+  router.post('/device-token', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId, deviceToken, platform } = req.body;
 
       if (!userId || !deviceToken || !platform) {
-        return res.status(400).json({ error: 'userId, deviceToken, and platform are required' });
+        return next(
+          new AppError('MISSING_FIELDS', 'userId, deviceToken, and platform are required', 400)
+        );
       }
 
       const registered = await UserPreferenceManager.registerDeviceToken(
@@ -109,7 +117,7 @@ export function createNotificationRouter(): Router {
       });
     } catch (error) {
       logger.error('Error registering device token', { error: String(error) });
-      res.status(500).json({ error: 'Failed to register device token' });
+      next(new AppError('DEVICE_TOKEN_REGISTER_FAILED', 'Failed to register device token', 500));
     }
   });
 
@@ -117,21 +125,26 @@ export function createNotificationRouter(): Router {
    * DELETE /api/v1/notifications/device-token/:userId/:deviceToken
    * Unregister device token
    */
-  router.delete('/device-token/:userId/:deviceToken', async (req: Request, res: Response) => {
-    try {
-      const { userId, deviceToken } = req.params;
+  router.delete(
+    '/device-token/:userId/:deviceToken',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { userId, deviceToken } = req.params;
 
-      const unregistered = await UserPreferenceManager.unregisterDeviceToken(userId, deviceToken);
+        const unregistered = await UserPreferenceManager.unregisterDeviceToken(userId, deviceToken);
 
-      res.json({
-        message: 'Device token unregistered',
-        data: unregistered,
-      });
-    } catch (error) {
-      logger.error('Error unregistering device token', { error: String(error) });
-      res.status(500).json({ error: 'Failed to unregister device token' });
+        res.json({
+          message: 'Device token unregistered',
+          data: unregistered,
+        });
+      } catch (error) {
+        logger.error('Error unregistering device token', { error: String(error) });
+        next(
+          new AppError('DEVICE_TOKEN_UNREGISTER_FAILED', 'Failed to unregister device token', 500)
+        );
+      }
     }
-  });
+  );
 
   // ========== UNSUBSCRIBE ROUTES ==========
 
@@ -139,7 +152,7 @@ export function createNotificationRouter(): Router {
    * POST /api/v1/notifications/unsubscribe/:token
    * Unsubscribe user via token (one-click unsubscribe)
    */
-  router.post('/unsubscribe/:token', async (req: Request, res: Response) => {
+  router.post('/unsubscribe/:token', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { token } = req.params;
 
@@ -151,13 +164,13 @@ export function createNotificationRouter(): Router {
           <body>
             <h1>Unsubscribed</h1>
             <p>You have been unsubscribed from all notifications.</p>
-            <p><a href="${process.env.FRONTEND_URL || 'https://stellar-save.com'}">Return to Stellar-Save</a></p>
+            <p><a href="${config.urls.frontend}">Return to Stellar-Save</a></p>
           </body>
         </html>
       `);
     } catch (error) {
       logger.error('Error unsubscribing user', { error: String(error) });
-      res.status(400).json({ error: 'Invalid unsubscribe token' });
+      next(new AppError('INVALID_UNSUBSCRIBE_TOKEN', 'Invalid unsubscribe token', 400));
     }
   });
 
@@ -165,7 +178,7 @@ export function createNotificationRouter(): Router {
    * POST /api/v1/notifications/resubscribe/:userId
    * Re-subscribe user to notifications
    */
-  router.post('/resubscribe/:userId', async (req: Request, res: Response) => {
+  router.post('/resubscribe/:userId', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.params;
 
@@ -177,7 +190,7 @@ export function createNotificationRouter(): Router {
       });
     } catch (error) {
       logger.error('Error resubscribing user', { error: String(error) });
-      res.status(500).json({ error: 'Failed to resubscribe user' });
+      next(new AppError('RESUBSCRIBE_FAILED', 'Failed to resubscribe user', 500));
     }
   });
 
@@ -187,12 +200,14 @@ export function createNotificationRouter(): Router {
    * POST /api/v1/notifications/send-email
    * Send an email notification
    */
-  router.post('/send-email', async (req: Request, res: Response) => {
+  router.post('/send-email', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId, to, templateId, templateData, subject } = req.body;
 
       if (!to || !templateId || !templateData) {
-        return res.status(400).json({ error: 'to, templateId, and templateData are required' });
+        return next(
+          new AppError('MISSING_FIELDS', 'to, templateId, and templateData are required', 400)
+        );
       }
 
       // Check preferences
@@ -204,9 +219,13 @@ export function createNotificationRouter(): Router {
         );
 
         if (!shouldSend) {
-          return res.status(403).json({
-            error: 'User has disabled email notifications for this type',
-          });
+          return next(
+            new AppError(
+              'EMAIL_NOTIFICATIONS_DISABLED',
+              'User has disabled email notifications for this type',
+              403
+            )
+          );
         }
       }
 
@@ -218,7 +237,7 @@ export function createNotificationRouter(): Router {
       });
     } catch (error) {
       logger.error('Error sending email', { error: String(error) });
-      res.status(500).json({ error: 'Failed to send email notification' });
+      next(new AppError('EMAIL_SEND_FAILED', 'Failed to send email notification', 500));
     }
   });
 
@@ -226,143 +245,79 @@ export function createNotificationRouter(): Router {
    * POST /api/v1/notifications/send-push
    * Send a push notification
    */
-  router.post('/send-push', async (req: Request, res: Response) => {
+  router.post('/send-push', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId, deviceToken, templateId, templateData, title, body } = req.body;
+      const { userId, title, body, data } = req.body;
 
-      if (!deviceToken || !templateId || !templateData) {
-        return res.status(400).json({
-          error: 'deviceToken, templateId, and templateData are required',
-        });
+      if (!userId || !title || !body) {
+        return next(new AppError('MISSING_FIELDS', 'userId, title, and body are required', 400));
       }
 
-      // Check preferences
-      if (userId) {
-        const shouldSend = await UserPreferenceManager.shouldSendNotification(
-          userId,
-          'push',
-          templateId
-        );
-
-        if (!shouldSend) {
-          return res.status(403).json({
-            error: 'User has disabled push notifications for this type',
-          });
-        }
-      }
-
-      const messageId = await notificationService.sendPushNotification(
-        deviceToken,
-        templateId,
-        templateData,
-        title,
-        body
+      const shouldSend = await UserPreferenceManager.shouldSendNotification(
+        userId,
+        'push',
+        'push'
       );
+
+      if (!shouldSend) {
+        return next(
+          new AppError(
+            'PUSH_NOTIFICATIONS_DISABLED',
+            'User has disabled push notifications',
+            403
+          )
+        );
+      }
+
+      const result = await pushNotificationService.sendToUser(userId, { title, body, data });
 
       res.status(202).json({
         message: 'Push notification sent',
-        messageId,
+        result,
       });
     } catch (error) {
       logger.error('Error sending push notification', { error: String(error) });
-      res.status(500).json({ error: 'Failed to send push notification' });
+      next(new AppError('PUSH_SEND_FAILED', 'Failed to send push notification', 500));
     }
   });
 
   /**
-   * POST /api/v1/notifications/queue
-   * Queue a notification for later sending
+   * POST /api/v1/notifications/send-web-push
+   * Send a web push notification
    */
-  router.post('/queue', async (req: Request, res: Response) => {
+  router.post('/send-web-push', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId, templateKey, recipient, templateData, notificationType, priority, scheduledFor } =
-        req.body;
+      const { userId, title, body, data } = req.body;
 
-      if (!userId || !templateKey || !recipient || !templateData || !notificationType) {
-        return res.status(400).json({
-          error: 'userId, templateKey, recipient, templateData, and notificationType are required',
-        });
+      if (!userId || !title || !body) {
+        return next(new AppError('MISSING_FIELDS', 'userId, title, and body are required', 400));
       }
 
-      const queueId = await notificationService.queueNotification(
+      const shouldSend = await UserPreferenceManager.shouldSendNotification(
         userId,
-        templateKey,
-        recipient,
-        templateData,
-        notificationType,
-        priority || 0,
-        scheduledFor ? new Date(scheduledFor) : undefined
+        'push',
+        'web-push'
       );
 
+      if (!shouldSend) {
+        return next(
+          new AppError(
+            'PUSH_NOTIFICATIONS_DISABLED',
+            'User has disabled push notifications',
+            403
+          )
+        );
+      }
+
+      const result = await webPushService.sendToUser(userId, { title, body, data });
+
       res.status(202).json({
-        message: 'Notification queued',
-        queueId,
+        message: 'Web push notification sent',
+        result,
       });
     } catch (error) {
-      logger.error('Error queueing notification', { error: String(error) });
-      res.status(500).json({ error: 'Failed to queue notification' });
-    }
-  });
-
-  /**
-   * POST /api/v1/notifications/process-queue
-   * Process queued notifications
-   */
-  router.post('/process-queue', async (req: Request, res: Response) => {
-    try {
-      const batchSize = req.body.batchSize || 100;
-
-      const processed = await notificationService.processQueuedNotifications(batchSize);
-
-      res.json({
-        message: 'Queue processed',
-        processedCount: processed,
-      });
-    } catch (error) {
-      logger.error('Error processing queue', { error: String(error) });
-      res.status(500).json({ error: 'Failed to process queue' });
-    }
-  });
-
-  // ========== NOTIFICATION HISTORY ROUTES ==========
-
-  /**
-   * GET /api/v1/notifications/history/:userId
-   * Get notification history for a user
-   */
-  router.get('/history/:userId', async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.params;
-      const limit = parseInt(req.query.limit as string) || 20;
-
-      const history = await notificationService.getNotificationHistory(userId, limit);
-
-      res.json({
-        userId,
-        count: history.length,
-        notifications: history,
-      });
-    } catch (error) {
-      logger.error('Error fetching notification history', { error: String(error) });
-      res.status(500).json({ error: 'Failed to fetch notification history' });
-    }
-  });
-
-  /**
-   * GET /api/v1/notifications/stats
-   * Get notification service statistics
-   */
-  router.get('/stats', async (req: Request, res: Response) => {
-    try {
-      const stats = await notificationService.getNotificationStats();
-
-      res.json({
-        timestamp: new Date(),
-        stats,
-      });
-    } catch (error) {
-      logger.error('Error fetching notification stats', { error: String(error) });
-      res.status(500).json({ error: 'Failed to fetch statistics' });
+      logger.error('Error sending web push notification', { error: String(error) });
+      next(new AppError('WEB_PUSH_SEND_FAILED', 'Failed to send web push notification', 500));
     }
   });
 
@@ -370,187 +325,103 @@ export function createNotificationRouter(): Router {
 
   /**
    * GET /api/v1/notifications/templates
-   * Get all active templates
+   * List all notification templates
    */
-  router.get('/templates', async (req: Request, res: Response) => {
+  router.get('/templates', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const templates = await NotificationTemplateManager.getActiveTemplates();
-
-      res.json({
-        count: templates.length,
-        templates,
-      });
+      const templates = await NotificationTemplateManager.getAllTemplates();
+      res.json(templates);
     } catch (error) {
       logger.error('Error fetching templates', { error: String(error) });
-      res.status(500).json({ error: 'Failed to fetch templates' });
+      next(new AppError('TEMPLATES_FETCH_FAILED', 'Failed to fetch templates', 500));
     }
   });
 
   /**
-   * GET /api/v1/notifications/templates/:templateKey
-   * Get a specific template
+   * GET /api/v1/notifications/templates/:templateId
+   * Get a specific notification template
    */
-  router.get('/templates/:templateKey', async (req: Request, res: Response) => {
+  router.get('/templates/:templateId', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { templateKey } = req.params;
+      const { templateId } = req.params;
 
-      const template = await NotificationTemplateManager.getTemplate(templateKey);
+      const template = await NotificationTemplateManager.getTemplate(templateId);
 
       if (!template) {
-        return res.status(404).json({ error: 'Template not found' });
+        return next(new AppError('TEMPLATE_NOT_FOUND', 'Template not found', 404));
       }
 
       res.json(template);
     } catch (error) {
       logger.error('Error fetching template', { error: String(error) });
-      res.status(500).json({ error: 'Failed to fetch template' });
+      next(new AppError('TEMPLATE_FETCH_FAILED', 'Failed to fetch template', 500));
     }
   });
 
   /**
    * POST /api/v1/notifications/templates
-   * Create a new template (admin only)
+   * Create a new notification template
    */
-  router.post('/templates', async (req: Request, res: Response) => {
+  router.post('/templates', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { templateKey, templateName, templateType, subject, htmlContent, textContent, placeholders } =
-        req.body;
+      const { id, name, subject, body, type } = req.body;
 
-      if (!templateKey || !templateName || !templateType || !htmlContent || !textContent) {
-        return res.status(400).json({
-          error: 'templateKey, templateName, templateType, htmlContent, and textContent are required',
-        });
+      if (!id || !name || !body || !type) {
+        return next(new AppError('MISSING_FIELDS', 'id, name, body, and type are required', 400));
       }
 
       const template = await NotificationTemplateManager.createTemplate({
-        templateKey,
-        templateName,
-        templateType,
+        id,
+        name,
         subject,
-        htmlContent,
-        textContent,
-        placeholders: placeholders || [],
+        body,
+        type,
       });
 
-      res.status(201).json({
-        message: 'Template created',
-        template,
-      });
+      res.status(201).json(template);
     } catch (error) {
       logger.error('Error creating template', { error: String(error) });
-      res.status(500).json({ error: 'Failed to create template' });
+      next(new AppError('TEMPLATE_CREATE_FAILED', 'Failed to create template', 500));
     }
   });
 
   /**
-   * PUT /api/v1/notifications/templates/:templateKey
-   * Update a template (admin only)
+   * PUT /api/v1/notifications/templates/:templateId
+   * Update a notification template
    */
-  router.put('/templates/:templateKey', async (req: Request, res: Response) => {
+  router.put('/templates/:templateId', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { templateKey } = req.params;
-      const { subject, htmlContent, textContent, active } = req.body;
+      const { templateId } = req.params;
+      const updates = req.body;
 
-      const template = await NotificationTemplateManager.updateTemplate(templateKey, {
-        subject,
-        htmlContent,
-        textContent,
-        active,
-      });
+      const template = await NotificationTemplateManager.updateTemplate(templateId, updates);
 
-      res.json({
-        message: 'Template updated',
-        template,
-      });
+      res.json(template);
     } catch (error) {
       logger.error('Error updating template', { error: String(error) });
-      res.status(500).json({ error: 'Failed to update template' });
+      next(new AppError('TEMPLATE_UPDATE_FAILED', 'Failed to update template', 500));
     }
   });
 
-  // ========== WEB PUSH SUBSCRIPTION ROUTES ==========
-
   /**
-   * GET /api/v1/notifications/vapid-public-key
-   * Return the VAPID public key so the frontend can subscribe
+   * DELETE /api/v1/notifications/templates/:templateId
+   * Delete a notification template
    */
-  router.get('/vapid-public-key', (req: Request, res: Response) => {
-    const key = webPushService.getVapidPublicKey();
-    if (!key) {
-      return res.status(503).json({ error: 'Web push not configured' });
-    }
-    res.json({ publicKey: key });
-  });
+  router.delete(
+    '/templates/:templateId',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { templateId } = req.params;
 
-  /**
-   * POST /api/v1/notifications/subscribe
-   * Store a browser push subscription for a user
-   * Body: { userId, subscription: { endpoint, keys: { p256dh, auth } } }
-   */
-  router.post('/subscribe', async (req: Request, res: Response) => {
-    try {
-      const { userId, subscription } = req.body;
+        await NotificationTemplateManager.deleteTemplate(templateId);
 
-      if (!userId || !subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
-        return res.status(400).json({
-          error: 'userId and subscription (with endpoint, keys.p256dh, keys.auth) are required',
-        });
+        res.json({ message: 'Template deleted' });
+      } catch (error) {
+        logger.error('Error deleting template', { error: String(error) });
+        next(new AppError('TEMPLATE_DELETE_FAILED', 'Failed to delete template', 500));
       }
-
-      if (!webPushService.isEnabled()) {
-        return res.status(503).json({ error: 'Web push not configured on the server' });
-      }
-
-      await webPushService.saveSubscription(userId, subscription);
-      res.status(201).json({ message: 'Push subscription registered' });
-    } catch (error) {
-      logger.error('Error saving push subscription', { error: String(error) });
-      res.status(500).json({ error: 'Failed to save push subscription' });
     }
-  });
-
-  /**
-   * DELETE /api/v1/notifications/subscribe
-   * Remove a browser push subscription
-   * Body: { endpoint }
-   */
-  router.delete('/subscribe', async (req: Request, res: Response) => {
-    try {
-      const { endpoint } = req.body;
-
-      if (!endpoint) {
-        return res.status(400).json({ error: 'endpoint is required' });
-      }
-
-      await webPushService.deleteSubscription(endpoint);
-      res.json({ message: 'Push subscription removed' });
-    } catch (error) {
-      logger.error('Error removing push subscription', { error: String(error) });
-      res.status(500).json({ error: 'Failed to remove push subscription' });
-    }
-  });
-
-  // ========== HEALTH CHECK ==========
-
-  /**
-   * GET /api/v1/notifications/health
-   * Check notification service health
-   */
-  router.get('/health', (req: Request, res: Response) => {
-    const health = {
-      status: 'ok',
-      timestamp: new Date(),
-      providers: {
-        email: !!process.env.SENDGRID_API_KEY,
-        push: pushNotificationService.getAvailableProviders(),
-        webPush: webPushService.isEnabled(),
-      },
-    };
-
-    res.json(health);
-  });
+  );
 
   return router;
 }
-
-export const notificationRouter = createNotificationRouter();

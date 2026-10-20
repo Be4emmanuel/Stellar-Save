@@ -1,5 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
+
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { getExplorerTxUrl } from '../utils/explorerUrl';
 import './ContributionSuccessModal.css';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -149,6 +152,7 @@ export function ContributionSuccessModal({
 }: ContributionSuccessModalProps) {
   const [muted, setMuted] = useLocalStorage('contribution-sound-muted', false);
   const playedRef = useRef(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -156,6 +160,10 @@ export function ContributionSuccessModal({
     },
     [onClose]
   );
+
+  // Trap Tab/Shift+Tab within the dialog while open and restore focus to the
+  // triggering element on close.
+  useFocusTrap(dialogRef, open);
 
   useEffect(() => {
     if (!open) {
@@ -174,9 +182,11 @@ export function ContributionSuccessModal({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="success-modal-title"
+      aria-describedby="success-modal-description"
       style={{
         position: 'fixed',
         inset: 0,
@@ -252,11 +262,19 @@ export function ContributionSuccessModal({
 
         <h2
           id="success-modal-title"
-          style={{ margin: '0 0 4px', fontSize: '20px', fontWeight: 700, color: '#111827' }}
+          style={{
+            margin: '0 0 4px',
+            fontSize: '20px',
+            fontWeight: 700,
+            color: 'var(--color-text-primary)',
+          }}
         >
           Contribution Successful!
         </h2>
-        <p style={{ margin: '0 0 16px', color: '#6b7280', fontSize: '14px' }}>
+        <p
+          id="success-modal-description"
+          style={{ margin: '0 0 16px', color: '#6b7280', fontSize: '14px' }}
+        >
           {amount} XLM · Cycle #{cycleId}
         </p>
 
@@ -283,10 +301,10 @@ export function ContributionSuccessModal({
         {txHash && (
           <p style={{ margin: '0 0 20px', fontSize: '12px' }}>
             <a
-              href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+              href={getExplorerTxUrl(txHash)}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: '#6366f1', textDecoration: 'none' }}
+              style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
             >
               View on Stellar Explorer →
             </a>
@@ -298,6 +316,7 @@ export function ContributionSuccessModal({
           <ShareButton amount={amount} cycleId={cycleId} milestone={milestoneLabel} />
           <button
             onClick={onClose}
+            aria-label="Done"
             style={{
               padding: '8px 20px',
               borderRadius: '8px',

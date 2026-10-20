@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { fetchGroup } from '../utils/groupApi';
+
 import type { GroupMember } from '../utils/groupApi';
 
 interface CacheEntry {
@@ -42,7 +44,7 @@ export interface UseMembersReturn {
 
 export function useMembers(
   groupId: string | null | undefined,
-  options: UseMembersOptions = {},
+  options: UseMembersOptions = {}
 ): UseMembersReturn {
   const { autoRefresh = true, refreshInterval = AUTO_REFRESH_MS } = options;
 
@@ -52,53 +54,50 @@ export function useMembers(
 
   const fetchIdRef = useRef(0);
 
-  const load = useCallback(
-    async (id: string, bust = false) => {
-      const fetchId = ++fetchIdRef.current;
+  const load = useCallback(async (id: string, bust = false) => {
+    const fetchId = ++fetchIdRef.current;
 
-      if (!bust) {
-        const cached = getFromCache(id);
-        if (cached) {
-          setMembers(cached);
-          setError(null);
-          return;
-        }
+    if (!bust) {
+      const cached = getFromCache(id);
+      if (cached) {
+        setMembers(cached);
+        setError(null);
+        return;
       }
+    }
 
-      setIsLoading(true);
-      setError(null);
+    setIsLoading(true);
+    setError(null);
 
-      try {
-        const group = await fetchGroup(id);
+    try {
+      const group = await fetchGroup(id);
 
-        if (fetchId !== fetchIdRef.current) return;
+      if (fetchId !== fetchIdRef.current) return;
 
-        if (!group) {
-          setMembers([]);
-          setError('Group not found.');
-        } else {
-          const memberList = group.members ?? [];
-          setInCache(id, memberList);
-          setMembers(memberList);
-          setError(null);
-        }
-      } catch (err) {
-        if (fetchId !== fetchIdRef.current) return;
-
+      if (!group) {
         setMembers([]);
-        setError(
-          err instanceof Error && err.message
-            ? err.message
-            : 'Failed to load members. Please try again.',
-        );
-      } finally {
-        if (fetchId === fetchIdRef.current) {
-          setIsLoading(false);
-        }
+        setError('Group not found.');
+      } else {
+        const memberList = group.members ?? [];
+        setInCache(id, memberList);
+        setMembers(memberList);
+        setError(null);
       }
-    },
-    [],
-  );
+    } catch (err) {
+      if (fetchId !== fetchIdRef.current) return;
+
+      setMembers([]);
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Failed to load members. Please try again.'
+      );
+    } finally {
+      if (fetchId === fetchIdRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!groupId) {

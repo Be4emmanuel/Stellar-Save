@@ -1,13 +1,14 @@
 // backend/src/modules/webhooks/webhook.controller.ts
 import { Controller, Post, Get, Delete, Param, Body } from '@nestjs/common';
-import { WebhookService } from './webhook.service';
+
+import type { WebhookService } from './webhook.service';
 
 @Controller('webhooks')
 export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
 
   @Post()
-  async registerWebhook(@Body() body: any) {
+  async registerWebhook(@Body() body: { url: string; events: string[]; secret?: string }) {
     const userId = 'temp-user-id'; // TODO: Replace with real auth later
     return this.webhookService.registerWebhook(userId, body);
   }

@@ -1,3 +1,4 @@
+import CloseIcon from '@mui/icons-material/Close';
 import {
   Dialog,
   DialogTitle,
@@ -8,7 +9,9 @@ import {
   ListItemAvatar,
   Avatar,
   Typography,
+  IconButton,
 } from '@mui/material';
+
 import { useWallet } from '../hooks/useWallet';
 
 const WALLET_ICONS: Record<string, string> = {
@@ -32,11 +35,20 @@ export function WalletSelectModal({ open, onClose }: WalletSelectModalProps) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Connect Wallet</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        Connect Wallet
+        <IconButton onClick={onClose} size="small" aria-label="Close dialog" edge="end">
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
       <DialogContent sx={{ p: 0 }}>
         <List>
           {wallets.map((wallet) => (
-            <ListItemButton key={wallet.id} onClick={() => handleSelect(wallet.id)}>
+            <ListItemButton
+              key={wallet.id}
+              onClick={() => handleSelect(wallet.id)}
+              aria-label={`Connect with ${wallet.name}${wallet.installed ? '' : ' (not installed)'}`}
+            >
               <ListItemAvatar>
                 <Avatar
                   src={WALLET_ICONS[wallet.id]}

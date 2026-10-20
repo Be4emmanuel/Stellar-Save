@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+
 import { GroupStats } from '../components/GroupStats';
 
 describe('GroupStats', () => {
@@ -20,49 +21,25 @@ describe('GroupStats', () => {
   });
 
   it('calculates completion percentage correctly', () => {
-    render(
-      <GroupStats
-        totalContributed={5000}
-        totalPaidOut={3000}
-        totalExpected={10000}
-      />
-    );
+    render(<GroupStats totalContributed={5000} totalPaidOut={3000} totalExpected={10000} />);
 
     expect(screen.getByText('50%')).toBeInTheDocument();
   });
 
   it('calculates payout percentage correctly', () => {
-    render(
-      <GroupStats
-        totalContributed={5000}
-        totalPaidOut={3000}
-        totalExpected={10000}
-      />
-    );
+    render(<GroupStats totalContributed={5000} totalPaidOut={3000} totalExpected={10000} />);
 
     expect(screen.getByText('60%')).toBeInTheDocument();
   });
 
   it('handles zero values gracefully', () => {
-    render(
-      <GroupStats
-        totalContributed={0}
-        totalPaidOut={0}
-        totalExpected={0}
-      />
-    );
+    render(<GroupStats totalContributed={0} totalPaidOut={0} totalExpected={0} />);
 
     expect(screen.getAllByText('0%').length).toBeGreaterThan(0);
   });
 
   it('uses default currency when not provided', () => {
-    render(
-      <GroupStats
-        totalContributed={1000}
-        totalPaidOut={500}
-        totalExpected={2000}
-      />
-    );
+    render(<GroupStats totalContributed={1000} totalPaidOut={500} totalExpected={2000} />);
 
     expect(screen.getByText('1,000 XLM')).toBeInTheDocument();
   });

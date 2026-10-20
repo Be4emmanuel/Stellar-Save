@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 
-
 /**
  * Route metadata and configuration
  */
@@ -11,6 +10,8 @@ export interface RouteConfig {
   component: ComponentType;
   /** Whether this route requires authentication */
   protected: boolean;
+  /** Whether this route requires admin role (implies protected) */
+  adminOnly?: boolean;
   /** Optional route title for document.title */
   title?: string;
   /** Optional route description for metadata */
@@ -23,4 +24,3 @@ export interface RouteConfig {
 export interface RouteParams extends Record<string, string | undefined> {
   groupId?: string;
 }
-

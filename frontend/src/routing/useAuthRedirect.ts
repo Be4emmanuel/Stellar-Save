@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet } from '../hooks/useWallet';
+
 import { ROUTES } from './constants';
+import { useWallet } from '../hooks/useWallet';
 
 /**
  * Hook to handle post-authentication redirects.
@@ -14,7 +15,7 @@ export function useAuthRedirect() {
   useEffect(() => {
     if (status === 'connected') {
       const redirectPath = sessionStorage.getItem('redirectAfterAuth');
-      
+
       if (redirectPath && redirectPath !== ROUTES.HOME) {
         sessionStorage.removeItem('redirectAfterAuth');
         navigate(redirectPath, { replace: true });

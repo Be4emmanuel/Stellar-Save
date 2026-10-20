@@ -1,4 +1,5 @@
 import { createTheme } from '@mui/material/styles';
+
 import { themeTokens } from './tokens';
 
 // ── Shared component overrides ────────────────────────────────────────────────
@@ -76,25 +77,6 @@ export const darkTheme = createTheme({
         root: { backgroundColor: '#0d1117' },
       },
     },
-  },
-};
-
-export const lightTheme = createTheme({
-  ...sharedOverrides,
-  palette: {
-    mode: "light",
-    primary: themeTokens.palette.primary,
-    secondary: themeTokens.palette.secondary,
-    background: {
-      default: "#edf4ff",
-      paper: "#ffffff",
-    },
-    text: {
-      primary: "#152247",
-      secondary: "#4e5b82",
-    },
-    error: themeTokens.palette.error,
-    divider: "#d6dbe8",
   },
 });
 

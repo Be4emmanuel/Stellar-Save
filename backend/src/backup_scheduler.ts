@@ -1,9 +1,12 @@
-import { BackupService } from './backup_service';
-import { BackupJob } from './models';
+import { logger } from './logger';
+
+import type { BackupService } from './backup_service';
+import type { BackupJob } from './models';
+
 
 export interface SchedulerConfig {
-  fullBackupIntervalMs: number;    // default: 24h
-  incrementalIntervalMs: number;   // default: 6h
+  fullBackupIntervalMs: number; // default: 24h
+  incrementalIntervalMs: number; // default: 6h
 }
 
 const DEFAULT_CONFIG: SchedulerConfig = {
@@ -14,59 +17,78 @@ const DEFAULT_CONFIG: SchedulerConfig = {
 export class BackupScheduler {
   private config: SchedulerConfig;
   private service: BackupService;
-  private fullTimer: ReturnType<typeof setInterval> | null = null;
-  private incrementalTimer: ReturnType<typeof setInterval> | null = null;
-  private running = false;
+  private lastFullBackupTime = 0;
+  private lastIncrementalBackupTime = 0;
 
   constructor(service: BackupService, config: Partial<SchedulerConfig> = {}) {
     this.service = service;
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  start(): void {
-    if (this.running) return;
-    this.running = true;
-
-    // Run immediately on start, then on interval
-    this.runFull();
-    this.fullTimer = setInterval(() => this.runFull(), this.config.fullBackupIntervalMs);
-    this.incrementalTimer = setInterval(() => this.runIncremental(), this.config.incrementalIntervalMs);
-
-    console.log('[BackupScheduler] Started — full every', this.config.fullBackupIntervalMs / 3600000, 'h, incremental every', this.config.incrementalIntervalMs / 3600000, 'h');
+  /**
+   * Check if it's time for a full backup.
+   * Called by BackupOrchestrator on its timer.
+   */
+  shouldRunFullBackup(): boolean {
+    const elapsed = Date.now() - this.lastFullBackupTime;
+    return elapsed >= this.config.fullBackupIntervalMs;
   }
 
-  stop(): void {
-    if (this.fullTimer) clearInterval(this.fullTimer);
-    if (this.incrementalTimer) clearInterval(this.incrementalTimer);
-    this.fullTimer = null;
-    this.incrementalTimer = null;
-    this.running = false;
-    console.log('[BackupScheduler] Stopped');
+  /**
+   * Check if it's time for an incremental backup.
+   * Called by BackupOrchestrator on its timer.
+   */
+  shouldRunIncrementalBackup(): boolean {
+    const elapsed = Date.now() - this.lastIncrementalBackupTime;
+    return elapsed >= this.config.incrementalIntervalMs;
   }
 
-  isRunning(): boolean {
-    return this.running;
+  /**
+   * Get next scheduled time for full backup (ms from now).
+   */
+  getNextFullBackupTime(): number {
+    const elapsed = Date.now() - this.lastFullBackupTime;
+    return Math.max(0, this.config.fullBackupIntervalMs - elapsed);
   }
 
-  private async runFull(): Promise<BackupJob> {
-    console.log('[BackupScheduler] Starting full backup');
-    const job = await this.service.createBackup('full');
-    console.log('[BackupScheduler] Full backup queued:', job.id);
-    return job;
+  /**
+   * Get next scheduled time for incremental backup (ms from now).
+   */
+  getNextIncrementalBackupTime(): number {
+    const elapsed = Date.now() - this.lastIncrementalBackupTime;
+    return Math.max(0, this.config.incrementalIntervalMs - elapsed);
   }
 
-  private async runIncremental(): Promise<BackupJob> {
-    const base = this.service.getLatestCompleted('full');
-    const baseId = base?.id;
-    console.log('[BackupScheduler] Starting incremental backup, base:', baseId ?? 'none');
-    const job = await this.service.createBackup('incremental', baseId);
-    console.log('[BackupScheduler] Incremental backup queued:', job.id);
-    return job;
-  }
-
-  /** Trigger a manual backup outside the schedule */
+  /**
+   * Trigger a manual backup outside the schedule.
+   * Returns the queued job.
+   */
   async triggerManual(type: 'full' | 'incremental'): Promise<BackupJob> {
     if (type === 'full') return this.runFull();
     return this.runIncremental();
+  }
+
+  /**
+   * Internal: Execute full backup and update last run time.
+   */
+  private async runFull(): Promise<BackupJob> {
+    logger.info('[BackupScheduler] Starting full backup');
+    this.lastFullBackupTime = Date.now();
+    const job = await this.service.createBackup('full');
+    logger.info('[BackupScheduler] Full backup queued:', job.id);
+    return job;
+  }
+
+  /**
+   * Internal: Execute incremental backup and update last run time.
+   */
+  private async runIncremental(): Promise<BackupJob> {
+    const base = this.service.getLatestCompleted('full');
+    const baseId = base?.id;
+    logger.info('[BackupScheduler] Starting incremental backup, base:', baseId ?? 'none');
+    this.lastIncrementalBackupTime = Date.now();
+    const job = await this.service.createBackup('incremental', baseId);
+    logger.info('[BackupScheduler] Incremental backup queued:', job.id);
+    return job;
   }
 }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import { Button } from './Button';
 import { Input } from './Input';
 import './SettingsSection.css';
@@ -18,11 +19,10 @@ export function SettingsSection({ className = '' }: SettingsSectionProps) {
 
   const handleSave = () => {
     // In a real app, this would save to backend
-    console.log('Saving settings:', settings);
   };
 
-  const updateSetting = (key: string, value: any) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+  const updateSetting = (key: string, value: string | boolean) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   return (

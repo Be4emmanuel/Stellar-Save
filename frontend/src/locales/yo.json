@@ -7,12 +7,5 @@
     "appearanceDesc": "Yan bi Stellar Save ṣe han si ọ.",
     "language": "Èdè",
     "languageDesc": "Yan èdè ti o fẹ."
-  },
-  "common": {
-    "save": "Fipamọ",
-    "cancel": "Fagilee"
-  },
-  "scheduler": {
-    "balanceWarning": "Iwọn rẹ ni {{balance}} ninu {{total}}"
   }
 }

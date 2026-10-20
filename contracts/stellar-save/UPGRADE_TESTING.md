@@ -4,7 +4,7 @@ This document describes the comprehensive upgrade testing infrastructure for the
 
 ## Overview
 
-The upgrade tests verify that contract upgrades preserve state, maintain API compatibility, and allow safe rollback. Tests are organized into 9 categories covering all aspects of upgrade safety.
+The upgrade tests verify that contract upgrades preserve state, maintain API compatibility, and allow safe rollback. Tests are organized into 10 categories covering all aspects of upgrade safety.
 
 ## Test Organization
 
@@ -19,8 +19,9 @@ The upgrade tests verify that contract upgrades preserve state, maintain API com
 | `token_allowlist_preservation` | Token allowlist survives upgrade | 3 tests |
 | `full_lifecycle` | Group with members + contributions + payout survives upgrade | 3 tests |
 | `performance_regression` | Key operations stay within instruction budgets | 3 tests |
+| `migration_correctness` | Data correctness, partial-rollback, and failure scenarios | 6 tests |
 
-**Total: 36 upgrade tests**
+**Total: 42 upgrade tests**
 
 ## Running Tests
 
@@ -130,6 +131,23 @@ Verify that key operations complete within instruction budgets:
 - `test_perf_is_member_within_budget` - Membership checks
 - `test_perf_get_group_balance_within_budget` - Balance queries
 
+### 10. Migration Correctness & Failure-Scenario Tests
+
+Verify that migration writes correct data, that rollback is truly reversible, and
+that failure/edge scenarios (empty contract, repeated rollback) are handled safely:
+
+- `test_migration_correctness_schema_and_token_config_written` - After apply, all groups get correct TokenConfig + schema is V2
+- `test_partial_rollback_consistency` - Only backfilled entries removed; pre-existing configs preserved after rollback
+- `test_rollback_on_empty_contract_is_consistent` - Apply + rollback on a zero-group contract does not panic
+- `test_migration_record_direction_across_multiple_cycles` - Migration record direction is correct across multiple apply/rollback cycles
+- `test_migration_correctness_contribution_record_member_address_preserved` - `ContributionRecord.member_address` (not `.member`) is preserved across migration
+- `test_rollback_noop_does_not_corrupt_existing_data` - Redundant rollback (already at V1) is a safe no-op that leaves data intact
+
+> **Why these tests were added:** A review of the existing 36 tests found that rollback
+> _correctness under edge conditions_ and explicit data-field correctness (particularly
+> `ContributionRecord.member_address`) were not covered. Several test files also accessed
+> `record.member` (an invalid field) which was fixed as part of this work.
+
 ## Migration Framework
 
 The contract uses a version-tracked migration framework (`migration.rs`):
@@ -195,8 +213,9 @@ Check that you're calling `v1_to_v2::apply()` or `v1_to_v2::rollback()` correctl
 
 ## References
 
-- `src/upgrade_tests.rs` - All upgrade test implementations
+- `src/upgrade_tests.rs` - All upgrade test implementations (42 tests across 10 categories)
 - `src/migration.rs` - Migration framework
 - `src/migrations/v1_to_v2.rs` - v1→v2 migration implementation
-- `src/migration_tests.rs` - Migration framework unit tests
+- `src/migration_tests.rs` - Migration framework unit tests (includes `member_address` regression tests)
+- `CYCLE_CONTRIBUTIONS.md` - ContributionRecord field documentation and technical debt notes
 - `.github/workflows/upgrade-tests.yml` - CI workflow
