@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * E2E tests: Group creation flow
  * Covers navigation to create group page, form rendering, and validation.
  */
-test.describe('Group creation flow', () => {
+test.describe('@journey Group creation flow', () => {
   test('create group page loads without crashing', async ({ page }) => {
     await page.goto('/groups/create');
     await expect(page.locator('body')).toBeVisible();

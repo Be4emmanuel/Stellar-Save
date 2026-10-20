@@ -38,4 +38,4 @@ try {
   process.exit(1);
 }
 
-console.log('✅ Event schema is in sync.');
+process.stdout.write('✅ Event schema is in sync.\n');
