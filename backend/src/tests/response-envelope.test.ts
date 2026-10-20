@@ -12,6 +12,17 @@ import {
   normalizeResponse,
   type ApiResponseEnvelope,
 } from '../lib/response-envelope';
+import {
+  AppError,
+  ValidationError,
+  AuthError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError,
+  UpstreamError,
+  isAppError,
+  mapError,
+} from '../lib/errors';
 
 describe('Response envelope helpers', () => {
   it('creates a success envelope with optional metadata', () => {
