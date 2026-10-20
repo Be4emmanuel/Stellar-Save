@@ -8,6 +8,8 @@
 //! - `types`:   Core contract-level types (`ContractConfig`, `MemberProfile`, etc.)
 //! - `contract`: All `#[contractimpl]` entry-point methods (thin facades to domain modules)
 //! - `group`, `contribution`, `payout`, `storage`, …: Domain modules
+//! - Test modules (`*_tests`, `test_utils`, etc.) are gated with `#[cfg(test)]`
+//!   and do not appear in production builds.
 //!
 //! ## Upgrade / migration path
 //!
@@ -27,7 +29,6 @@
 //! migrations for storage written by earlier versions of this same contract
 //! (e.g. schema/version bumps), not WASM upgrades.
 
-pub mod admin_actions_tests;
 pub mod auth;
 pub mod clone;
 pub mod constants;
@@ -60,23 +61,26 @@ pub mod token;
 pub mod types;
 pub mod zk_proof;
 
+pub mod milestones;
+
+// ── Test-only modules (excluded from production builds) ──────────────────────
+#[cfg(test)] pub mod admin_actions_tests;
+#[cfg(test)] pub mod cei_tests;
+#[cfg(test)] pub mod gas_benchmark;
+#[cfg(test)] pub mod insurance_integration_tests;
+#[cfg(test)] pub mod test_utils;
+#[cfg(test)] pub mod wrapping_audit;
+#[cfg(test)] pub mod zk_integration_tests;
+#[cfg(test)] pub mod zk_tests;
 // mod auto_contribution_tests;
-pub mod cei_tests;
-pub mod gas_benchmark;
-pub mod insurance_integration_tests;
-pub mod test_utils;
 // mod invitation_tests;
 // mod merge_tests;
 // mod migration_matrix_tests;
 // mod migration_tests;
 // mod milestone_tests;
-pub mod milestones;
 // mod multi_token_tests;
 // mod mutation_tests;
 // mod upgrade_tests;
-pub mod wrapping_audit;
-pub mod zk_integration_tests;
-pub mod zk_tests;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 pub use auth::{is_active_member, require_admin, require_creator, require_member};
