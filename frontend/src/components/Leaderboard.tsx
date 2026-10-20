@@ -484,11 +484,13 @@ export function Leaderboard({
                 No data available
               </Typography>
             ) : (
-              <Stack spacing={0}>
-                {groups.map((g) => (
-                  <GroupRow key={g.id} group={g} />
-                ))}
-              </Stack>
+              <VirtualizedList
+                items={groups}
+                itemHeight={72}
+                getKey={(group) => group.id}
+                label="Leaderboard groups"
+                renderItem={(group) => <GroupRow group={group} />}
+              />
             )}
           </Box>
         ) : (
@@ -501,15 +503,18 @@ export function Leaderboard({
                 No data available
               </Typography>
             ) : (
-              <Stack spacing={0}>
-                {members.map((m) => (
+              <VirtualizedList
+                items={members}
+                itemHeight={72}
+                getKey={(member) => member.address}
+                label="Leaderboard members"
+                renderItem={(member) => (
                   <MemberRow
-                    key={m.address}
-                    member={m}
-                    highlight={m.address === currentUserAddress}
+                    member={member}
+                    highlight={member.address === currentUserAddress}
                   />
-                ))}
-              </Stack>
+                )}
+              />
             )}
           </Box>
         )}

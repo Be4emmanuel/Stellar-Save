@@ -1,5 +1,5 @@
 import type { MouseEvent, ChangeEvent } from 'react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Stack,
@@ -401,16 +401,16 @@ export function MemberDirectory({
 }: MemberDirectoryProps) {
   const [filters, setFilters] = useState<MemberDirectoryFilters>(DEFAULT_MEMBER_FILTERS);
 
-  const handleFilterChange = useCallback((patch: Partial<MemberDirectoryFilters>) => {
+  const handleFilterChange = (patch: Partial<MemberDirectoryFilters>) => {
     setFilters((prev: MemberDirectoryFilters) => ({ ...prev, ...patch }));
-  }, []);
+  };
 
-  const handleClearFilters = useCallback(() => {
+  const handleClearFilters = () => {
     setFilters(DEFAULT_MEMBER_FILTERS);
-  }, []);
+  };
 
-  const filtered = useMemo(() => applyFilters(members, filters), [members, filters]);
-  const sorted = useMemo(() => applySort(filtered, filters.sort), [filtered, filters.sort]);
+  const filtered = applyFilters(members, filters);
+  const sorted = applySort(filtered, filters.sort);
 
   const hasActiveFilters =
     filters.search.trim() !== '' ||
@@ -477,6 +477,22 @@ export function MemberDirectory({
             </Box>
           )}
         </Box>
+      ) : sorted.length > 100 ? (
+        <VirtualizedList
+          items={sorted}
+          itemHeight={380}
+          getKey={(member) => member.address}
+          label="Member directory results"
+          renderItem={(member) => (
+            <Box sx={{ height: '100%', pb: 2, boxSizing: 'border-box' }}>
+              <MemberDirectoryCard
+                member={member}
+                isCurrentUser={member.address === currentUserAddress}
+                groupId={groupId}
+              />
+            </Box>
+          )}
+        />
       ) : (
         <Grid container spacing={2}>
           {sorted.map((member: MemberProfile) => (
