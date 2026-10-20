@@ -62,8 +62,9 @@ To get started quickly, follow the dedicated setup guides for each component of 
 git clone https://github.com/Xoulomon/Stellar-Save.git
 cd Stellar-Save
 
-# Install root dependencies & git hooks
-npm install
+# Install workspace dependencies & git hooks (pnpm is the only supported package manager)
+corepack enable
+pnpm install
 
 # Build Soroban smart contracts
 ./scripts/build.sh
@@ -262,3 +263,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <!-- handsoff-issue-1706 -->
 - #1706: [Smart Contracts] Split contract.rs entrypoint into focused modules
+
+<!-- handsoff-issue-1868 -->
+- #1868: [Backend] Move `analytics_service.ts` (762 lines) into `modules/analytics`

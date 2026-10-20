@@ -137,11 +137,13 @@ function installConsoleBridge(): void {
       winstonLogger.log(level, message);
     };
 
+  /* eslint-disable no-console -- logger module: intentionally patches console */
   console.log = bridge('info');
   console.info = bridge('info');
   console.warn = bridge('warn');
   console.error = bridge('error');
   console.debug = bridge('debug');
+  /* eslint-enable no-console */
 }
 
 if (config.nodeEnv !== 'test') {

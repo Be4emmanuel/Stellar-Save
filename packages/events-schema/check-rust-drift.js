@@ -35,4 +35,4 @@ if (missingFromSchema.length || missingEmitter.length) {
   process.exit(1);
 }
 
-console.log(`✅ events.rs and schema.json agree on ${schemaTopics.size} topics.`);
+process.stdout.write(`✅ events.rs and schema.json agree on ${schemaTopics.size} topics.\n`);
