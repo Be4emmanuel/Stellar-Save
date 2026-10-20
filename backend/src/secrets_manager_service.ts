@@ -1,6 +1,6 @@
 /**
  * Secrets Manager Service (Issue #1105)
- * 
+ *
  * AWS Secrets Manager integration with automatic rotation support.
  * Removes hardcoded secrets from environment files and provides
  * centralized secret management with audit logging.
@@ -16,8 +16,9 @@ import {
   CreateSecretCommand,
   TagResourceCommand,
 } from '@aws-sdk/client-secrets-manager';
-import { logger } from './logger';
+
 import { config } from './config';
+import { logger } from './logger';
 
 export interface SecretMetadata {
   name: string;
@@ -39,19 +40,33 @@ export interface RotationConfig {
   lambdaArn?: string; // For custom rotation
 }
 
+export interface SecretsManagerServiceDeps {
+  client?: SecretsManagerClient;
+  config?: { aws: { region: string; accessKeyId?: string; secretAccessKey?: string } };
+  logger?: { info: (...a: unknown[]) => void; error: (...a: unknown[]) => void; warn: (...a: unknown[]) => void; debug: (...a: unknown[]) => void };
+}
+
 export class SecretsManagerService {
   private client: SecretsManagerClient;
   private cache: Map<string, { value: string; expiry: number }> = new Map();
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly log: NonNullable<SecretsManagerServiceDeps['logger']>;
 
-  constructor() {
-    this.client = new SecretsManagerClient({
-      region: config.aws.region,
-      credentials: config.aws.accessKeyId && config.aws.secretAccessKey ? {
-        accessKeyId: config.aws.accessKeyId,
-        secretAccessKey: config.aws.secretAccessKey,
-      } : undefined,
-    });
+  constructor(deps?: SecretsManagerServiceDeps) {
+    const resolvedConfig = deps?.config ?? config;
+    this.log = deps?.logger ?? logger;
+    this.client =
+      deps?.client ??
+      new SecretsManagerClient({
+        region: resolvedConfig.aws.region,
+        credentials:
+          resolvedConfig.aws.accessKeyId && resolvedConfig.aws.secretAccessKey
+            ? {
+                accessKeyId: resolvedConfig.aws.accessKeyId,
+                secretAccessKey: resolvedConfig.aws.secretAccessKey,
+              }
+            : undefined,
+      });
   }
 
   /**
@@ -98,7 +113,9 @@ export class SecretsManagerService {
         secretName,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      throw new Error(`Failed to retrieve secret ${secretName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to retrieve secret ${secretName}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -158,10 +175,7 @@ export class SecretsManagerService {
   /**
    * Enable automatic rotation for a secret
    */
-  async enableRotation(
-    secretName: string,
-    rotationConfig: RotationConfig
-  ): Promise<void> {
+  async enableRotation(secretName: string, rotationConfig: RotationConfig): Promise<void> {
     try {
       const command = new UpdateSecretCommand({
         SecretId: secretName,
@@ -247,7 +261,7 @@ export class SecretsManagerService {
     try {
       // First get the ARN
       const metadata = await this.getSecretMetadata(secretName);
-      
+
       if (!metadata.arn) {
         throw new Error('Secret ARN not found');
       }
@@ -338,16 +352,11 @@ export async function migrateSecretToAWS(
   description: string
 ): Promise<void> {
   try {
-    await secretsManager.createSecret(
-      secretName,
-      envVarValue,
-      description,
-      {
-        Environment: config.nodeEnv,
-        ManagedBy: 'stellar-save-backend',
-        CreatedAt: new Date().toISOString(),
-      }
-    );
+    await secretsManager.createSecret(secretName, envVarValue, description, {
+      Environment: config.nodeEnv,
+      ManagedBy: 'stellar-save-backend',
+      CreatedAt: new Date().toISOString(),
+    });
 
     logger.info('Secret migrated to AWS Secrets Manager', {
       secretName,
@@ -378,10 +387,10 @@ export async function initializeSecrets(): Promise<void> {
   for (const { name, envVar } of secretConfigs) {
     try {
       const secret = await secretsManager.getSecret(name);
-      
+
       // Override environment variable with secret from AWS
       process.env[envVar] = secret.value;
-      
+
       logger.info('Secret loaded from AWS', { secretName: name });
     } catch (error) {
       logger.warn('Failed to load secret from AWS, using environment variable', {

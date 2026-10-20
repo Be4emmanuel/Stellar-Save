@@ -1,49 +1,75 @@
-# ZK Circuit Audit Process
-<!-- Closes #1174 -->
+# ZK Circuit Audit Report
 
-## Scope
-`zk/circuits/membership_proof.circom` — Groth16 Poseidon-commitment range proof.
+## Audit Summary
 
-## Pre-Audit Checklist
-- [ ] All signals constrained (no under-constrained wires)
-- [ ] Poseidon hash matches on-chain commitment (same domain separator)
-- [ ] Range comparator bounds prevent overflow (`GreaterEqThan(252)`)
-- [ ] Trusted setup ceremony completed (or PTAU file sourced from Powers of Tau)
-- [ ] Final `.zkey` contribution verified with `snarkjs zkey verify`
+| Property     | Value                      |
+|--------------|----------------------------|
+| Version      | 0.1.0 (Draft)              |
+| Auditor      | Internal Review            |
+| Date         | 2026-07-29                 |
+| Status       | Open Items Remaining       |
 
-## Audit Steps
+## Circuit Description
 
-### 1. Static Analysis
-```bash
-# Check for under-constrained signals
-circom zk/circuits/membership_proof.circom --r1cs --wasm --sym -o zk/build
-snarkjs r1cs info zk/build/membership_proof.r1cs
-```
+The Stellar-Save ZK circuit enforces the following constraints:
 
-### 2. Witness Generation Test
-```bash
-node zk/build/membership_proof_js/generate_witness.js \
-  zk/build/membership_proof_js/membership_proof.wasm \
-  zk/test/input_valid.json \
-  zk/build/witness.wtns
-```
+1. **Contribution Range Check**: Contribution amount is within `[min_contribution, max_contribution]`
+2. **Member Membership Proof**: Prover is a member of the group Merkle tree
+3. **Nullifier Uniqueness**: Proof nonce has not been previously used (anti-replay)
+4. **Cycle Binding**: Proof is bound to a specific cycle number
 
-### 3. Proof Soundness
-- Verify a valid proof passes: `snarkjs groth16 verify`
-- Verify a forged proof fails (wrong commitment, wrong threshold)
-- Fuzz private inputs; confirm commitment mismatch is always rejected
+## Open Audit Items
 
-### 4. External Audit
-Engage a ZK-specialised firm (e.g. Trail of Bits, Veridise, or zkSecurity) for:
-- Constraint system completeness review
-- Trusted setup verification
-- Side-channel analysis of WASM prover
+### HIGH Priority
 
-## Fix & Disclosure Timeline
-| Day | Action |
-|-----|--------|
-| 0   | Finding reported to `security@stellar-save.example` |
-| 1   | Triage and severity classification |
-| 7   | Patch developed and internally reviewed |
-| 14  | Patch deployed; circuit re-audited if needed |
-| 21  | Public disclosure after community notification |
+| ID     | Description                                                    | Status  | Tracked By        |
+|--------|----------------------------------------------------------------|---------|-------------------|
+| ZK-001 | Verify replay protection: nullifier storage and uniqueness checks | OPEN    | Issue #1327       |
+| ZK-002 | Confirm malformed-proof early rejection before crypto operations  | OPEN    | Issue #1327       |
+
+### MEDIUM Priority
+
+| ID     | Description                                                            | Status  | Tracked By  |
+|--------|------------------------------------------------------------------------|---------|-------------|
+| ZK-003 | Gas cost of valid proof verification must be documented and bounded     | OPEN    | Issue #1327 |
+| ZK-004 | Test boundary: proof with all-zero public inputs must be rejected       | OPEN    | Issue #1327 |
+| ZK-005 | Test boundary: truncated proof bytes must be rejected gracefully        | OPEN    | Issue #1327 |
+
+### LOW Priority
+
+| ID     | Description                                                         | Status  | Tracked By  |
+|--------|---------------------------------------------------------------------|---------|-------------|
+| ZK-006 | Add test for proof from a different group ID (cross-group binding)  | OPEN    | Issue #1327 |
+| ZK-007 | Verify circuit constants match business-rule constants in constants.rs | OPEN | Issue #1330 |
+
+## Test Coverage Requirements
+
+| Test Case                                  | Required | Implemented |
+|--------------------------------------------|----------|-------------|
+| Valid proof accepted                        | YES      | Partial     |
+| Invalid proof rejected                      | YES      | Partial     |
+| Malformed/truncated proof rejected          | YES      | NO          |
+| Replayed proof rejected                     | YES      | NO          |
+| All-zero public inputs rejected             | YES      | NO          |
+| Cross-group proof rejected                  | YES      | NO          |
+| Gas cost within acceptable bounds           | YES      | NO          |
+| Empty proof bytes rejected                  | YES      | NO          |
+
+## Acceptable Gas Cost Bounds
+
+| Operation          | Max Allowed Instructions | Notes                           |
+|--------------------|-------------------------|---------------------------------|
+| Valid verification  | 100,000                 | Ed25519 verify included          |
+| Invalid (reject)    | 20,000                  | Must fail fast without full work |
+| Malformed (reject)  | 5,000                   | Input validation only            |
+
+## Known Limitations
+
+1. **Phase 1 Only**: Current implementation uses Ed25519 signatures as a proof-of-concept, not a full ZK system.
+2. **No Trusted Setup**: Full Groth16 requires a trusted setup ceremony not yet performed.
+3. **Nullifier Storage**: On-chain nullifier storage needs TTL/cleanup strategy.
+
+## Resolution Plan
+
+All open items will be addressed by implementing dedicated unit tests in `src/zk_tests.rs`.
+See Issue #1327 for implementation tasks.

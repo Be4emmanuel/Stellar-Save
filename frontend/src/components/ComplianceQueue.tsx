@@ -56,31 +56,49 @@ function truncate(str: string, len = 16): string {
 const ComplianceQueue: React.FC = () => {
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif' }}>
-      <p style={{ color: '#7f8c8d', fontSize: '13px', marginBottom: '8px' }}>
+      <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px', marginBottom: '8px' }}>
         Admin only - Compliance Review Queue
       </p>
       <h2 style={{ marginTop: 0 }}>Compliance Review Queue</h2>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
         <thead>
-          <tr style={{ background: '#f2f2f2' }}>
-            {['Tx Hash', 'Address', 'Risk', 'Reasons', 'Timestamp', 'Status', 'Actions'].map((h) => (
-              <th key={h} style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>
-                {h}
-              </th>
-            ))}
+          <tr style={{ background: 'var(--color-bg-secondary)' }}>
+            {['Tx Hash', 'Address', 'Risk', 'Reasons', 'Timestamp', 'Status', 'Actions'].map(
+              (h) => (
+                <th
+                  key={h}
+                  style={{
+                    padding: '10px',
+                    textAlign: 'left',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}
+                >
+                  {h}
+                </th>
+              )
+            )}
           </tr>
         </thead>
         <tbody>
           {MOCK_FLAGS.map((flag) => (
-            <tr key={flag.id} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={{ padding: '10px', fontFamily: 'monospace' }}>{truncate(flag.txHash, 12)}</td>
-              <td style={{ padding: '10px', fontFamily: 'monospace' }}>{truncate(flag.address, 12)}</td>
+            <tr key={flag.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+              <td style={{ padding: '10px', fontFamily: 'monospace' }}>
+                {truncate(flag.txHash, 12)}
+              </td>
+              <td style={{ padding: '10px', fontFamily: 'monospace' }}>
+                {truncate(flag.address, 12)}
+              </td>
               <td style={{ padding: '10px', fontWeight: 'bold', color: riskColor(flag.riskLevel) }}>
                 {flag.riskLevel}
               </td>
               <td style={{ padding: '10px' }}>{flag.reasons.join(', ')}</td>
               <td style={{ padding: '10px' }}>{new Date(flag.timestamp).toLocaleString()}</td>
-              <td style={{ padding: '10px', color: flag.reviewed ? '#27ae60' : '#e67e22' }}>
+              <td
+                style={{
+                  padding: '10px',
+                  color: flag.reviewed ? 'var(--color-success)' : 'var(--color-warning)',
+                }}
+              >
                 {flag.reviewed ? 'Reviewed' : 'Pending'}
               </td>
               <td style={{ padding: '10px' }}>
@@ -89,8 +107,13 @@ const ComplianceQueue: React.FC = () => {
                     <button
                       onClick={() => {}}
                       style={{
-                        marginRight: '6px', padding: '4px 10px', background: '#27ae60',
-                        color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer',
+                        marginRight: '6px',
+                        padding: '4px 10px',
+                        background: '#27ae60',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
                       }}
                     >
                       Approve
@@ -98,8 +121,12 @@ const ComplianceQueue: React.FC = () => {
                     <button
                       onClick={() => {}}
                       style={{
-                        padding: '4px 10px', background: '#c0392b',
-                        color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer',
+                        padding: '4px 10px',
+                        background: '#c0392b',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
                       }}
                     >
                       Reject

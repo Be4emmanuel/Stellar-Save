@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
 
 const ThrowError = ({ shouldThrow }: { shouldThrow: boolean }) => {
@@ -22,7 +23,7 @@ describe('RouteErrorBoundary', () => {
     render(
       <RouteErrorBoundary>
         <ThrowError shouldThrow={false} />
-      </RouteErrorBoundary>,
+      </RouteErrorBoundary>
     );
     expect(screen.getByText('No error content')).toBeInTheDocument();
   });
@@ -31,7 +32,7 @@ describe('RouteErrorBoundary', () => {
     render(
       <RouteErrorBoundary>
         <ThrowError shouldThrow={true} />
-      </RouteErrorBoundary>,
+      </RouteErrorBoundary>
     );
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
   });
@@ -40,7 +41,7 @@ describe('RouteErrorBoundary', () => {
     render(
       <RouteErrorBoundary>
         <ThrowError shouldThrow={true} />
-      </RouteErrorBoundary>,
+      </RouteErrorBoundary>
     );
     expect(screen.getByText('Error details')).toBeInTheDocument();
     expect(screen.getByText(/Test error thrown from component/)).toBeInTheDocument();
@@ -50,7 +51,7 @@ describe('RouteErrorBoundary', () => {
     render(
       <RouteErrorBoundary>
         <ThrowError shouldThrow={true} />
-      </RouteErrorBoundary>,
+      </RouteErrorBoundary>
     );
     expect(screen.getByRole('button', { name: /Try Again/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Go Back/ })).toBeInTheDocument();
@@ -60,7 +61,7 @@ describe('RouteErrorBoundary', () => {
     const { rerender } = render(
       <RouteErrorBoundary>
         <ThrowError shouldThrow={true} />
-      </RouteErrorBoundary>,
+      </RouteErrorBoundary>
     );
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
 
@@ -69,7 +70,7 @@ describe('RouteErrorBoundary', () => {
     rerender(
       <RouteErrorBoundary>
         <ThrowError shouldThrow={false} />
-      </RouteErrorBoundary>,
+      </RouteErrorBoundary>
     );
     expect(screen.getByText('No error content')).toBeInTheDocument();
   });
@@ -79,7 +80,7 @@ describe('RouteErrorBoundary', () => {
     render(
       <RouteErrorBoundary>
         <ThrowError shouldThrow={true} />
-      </RouteErrorBoundary>,
+      </RouteErrorBoundary>
     );
     fireEvent.click(screen.getByRole('button', { name: /Go Back/ }));
     expect(backSpy).toHaveBeenCalled();

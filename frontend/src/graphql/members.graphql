@@ -1,0 +1,17 @@
+# Fragments
+
+fragment MemberFields on Member {
+  id
+  address
+  name
+  joinedAt
+  groupIds
+}
+
+# Queries
+
+query GetMembers {
+  members {
+    ...MemberFields
+  }
+}

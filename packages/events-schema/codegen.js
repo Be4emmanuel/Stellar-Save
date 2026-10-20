@@ -65,7 +65,7 @@ for (const [topic, def] of Object.entries(events)) {
 // Union type
 lines.push(`export type ContractEvent =`);
 typeNames.forEach((name, i) => {
-  const sep = i < typeNames.length - 1 ? ' |' : ';';
+  const sep = i < typeNames.length - 1 ? '' : ';';
   lines.push(`  | ${name}${sep}`);
 });
 lines.push('');
@@ -87,4 +87,4 @@ if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
 const outPath = path.join(outDir, 'events.ts');
 fs.writeFileSync(outPath, lines.join('\n'), 'utf8');
-console.log(`Generated ${outPath} (${typeNames.length} event types)`);
+process.stdout.write(`Generated ${outPath} (${typeNames.length} event types)\n`);

@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
+
 import { ContributionCalendar } from '../components/ContributionCalendar';
+
 import type { GroupContribution, GroupCycle } from '../utils/groupApi';
 
 beforeAll(() => {
@@ -18,9 +20,33 @@ const now = new Date();
 const d = (offset: number) => new Date(now.getFullYear(), now.getMonth(), offset + 1);
 
 const baseContributions: GroupContribution[] = [
-  { id: 'c1', memberId: 'm1', memberName: 'Alice', amount: 100, timestamp: d(0), transactionHash: 'tx1', status: 'completed' },
-  { id: 'c2', memberId: 'm2', memberName: 'Bob',   amount: 100, timestamp: d(1), transactionHash: 'tx2', status: 'pending' },
-  { id: 'c3', memberId: 'm3', memberName: 'Carol', amount: 100, timestamp: d(2), transactionHash: 'tx3', status: 'failed' },
+  {
+    id: 'c1',
+    memberId: 'm1',
+    memberName: 'Alice',
+    amount: 100,
+    timestamp: d(0),
+    transactionHash: 'tx1',
+    status: 'completed',
+  },
+  {
+    id: 'c2',
+    memberId: 'm2',
+    memberName: 'Bob',
+    amount: 100,
+    timestamp: d(1),
+    transactionHash: 'tx2',
+    status: 'pending',
+  },
+  {
+    id: 'c3',
+    memberId: 'm3',
+    memberName: 'Carol',
+    amount: 100,
+    timestamp: d(2),
+    transactionHash: 'tx3',
+    status: 'failed',
+  },
 ];
 
 const activeCycle: GroupCycle = {
@@ -35,14 +61,14 @@ const activeCycle: GroupCycle = {
 function renderCalendar(
   contributions = baseContributions,
   currentCycle: GroupCycle | null = null,
-  onContribute?: (d: Date) => void,
+  onContribute?: (d: Date) => void
 ) {
   return render(
     <ContributionCalendar
       contributions={contributions}
       currentCycle={currentCycle}
       onContribute={onContribute}
-    />,
+    />
   );
 }
 

@@ -1,6 +1,7 @@
-import { Card } from '../Card';
-import { Badge } from '../Badge';
 import { formatAmount, formatDateRange } from '../../utils/format';
+import { Badge } from '../Badge';
+import { Card } from '../Card';
+
 import type { GroupCycle } from '../../utils/groupApi';
 
 interface PayoutSchedulePanelProps {
@@ -34,9 +35,7 @@ export function PayoutSchedulePanel({ cycles, currentCycle }: PayoutSchedulePane
             </Badge>
           </div>
           <div className="group-details-cycle-dates">
-            <span>
-              {formatDateRange(currentCycle.startDate, currentCycle.endDate)}
-            </span>
+            <span>{formatDateRange(currentCycle.startDate, currentCycle.endDate)}</span>
           </div>
           <div className="group-details-cycle-progress">
             <div className="group-details-progress-bar">

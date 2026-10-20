@@ -1,5 +1,33 @@
-import { PrismaClient } from '@prisma/client';
+
+import { logger } from './logger';
 import * as redis from './redis';
+
+import type { PrismaClient } from '@prisma/client';
+
+// ---------------------------------------------------------------------------
+// Helpers for working with Prisma's opaque JsonValue event data fields.
+// The Soroban event payload schema is an open-ended JSON blob, so we access
+// it via a typed narrow helper rather than widening with `any`.
+// ---------------------------------------------------------------------------
+
+/** Narrow a Prisma JsonValue to a plain object so we can read known keys. */
+function asEventData(v: unknown): Record<string, unknown> {
+  if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+    return v as Record<string, unknown>;
+  }
+  return {};
+}
+
+function eventDataType(v: unknown): string | undefined {
+  const d = asEventData(v);
+  return typeof d['type'] === 'string' ? d['type'] : undefined;
+}
+
+function eventDataAmount(v: unknown): number {
+  const d = asEventData(v);
+  const amount = Number(d['amount'] ?? 0);
+  return isNaN(amount) ? 0 : amount;
+}
 
 export class AnalyticsAggregator {
   private prisma: PrismaClient;
@@ -18,7 +46,7 @@ export class AnalyticsAggregator {
    */
   start(): void {
     if (this.aggregationInterval) {
-      console.warn('Aggregation job already running');
+      logger.warn('Aggregation job already running');
       return;
     }
 
@@ -30,9 +58,7 @@ export class AnalyticsAggregator {
       this.runAggregation();
     }, this.aggregationIntervalMs);
 
-    console.log(
-      `Analytics aggregation job started (interval: ${this.aggregationIntervalMs}ms)`
-    );
+    logger.info(`Analytics aggregation job started (interval: ${this.aggregationIntervalMs}ms)`);
   }
 
   /**
@@ -42,7 +68,7 @@ export class AnalyticsAggregator {
     if (this.aggregationInterval) {
       clearInterval(this.aggregationInterval);
       this.aggregationInterval = null;
-      console.log('Analytics aggregation job stopped');
+      logger.info('Analytics aggregation job stopped');
     }
   }
 
@@ -51,7 +77,7 @@ export class AnalyticsAggregator {
    */
   async runAggregation(): Promise<void> {
     try {
-      console.log('Starting analytics aggregation...');
+      logger.info('Starting analytics aggregation...');
 
       const startTime = Date.now();
 
@@ -65,7 +91,7 @@ export class AnalyticsAggregator {
       await this.aggregateGroupMetrics(yesterday);
 
       const duration = Date.now() - startTime;
-      console.log(`Analytics aggregation completed in ${duration}ms`);
+      logger.info(`Analytics aggregation completed in ${duration}ms`);
 
       // Clear related caches
       await redis.delPattern('platform_stats:*');
@@ -73,7 +99,7 @@ export class AnalyticsAggregator {
       await redis.delPattern('user_stats:*');
       await redis.delPattern('group_stats:*');
     } catch (error) {
-      console.error('Error running analytics aggregation:', error);
+      logger.error('Error running analytics aggregation:', error);
     }
   }
 
@@ -101,32 +127,27 @@ export class AnalyticsAggregator {
 
       // Count events by type
       const contributions = events.filter(
-        (e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'contribution'
+        (e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'contribution'
       ).length;
       const payouts = events.filter(
-        (e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'payout'
+        (e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'payout'
       ).length;
 
       // Calculate totals from transactions
       const contributionTotal = events
         .filter(
-          (e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'contribution'
+          (e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'contribution'
         )
-        .reduce((sum, e) => sum + ((e.eventData as any)?.amount || 0), 0);
+        .reduce((sum, e) => sum + eventDataAmount(e.eventData), 0);
 
       const payoutTotal = events
-        .filter((e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'payout')
-        .reduce((sum, e) => sum + ((e.eventData as any)?.amount || 0), 0);
+        .filter((e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'payout')
+        .reduce((sum, e) => sum + eventDataAmount(e.eventData), 0);
 
       // Calculate success rate (groups that completed payouts)
-      const completedGroups = events.filter(
-        (e) => e.eventType === 'group_completed'
-      ).length;
-      const createdGroups = events.filter(
-        (e) => e.eventType === 'group_created'
-      ).length;
-      const successRate =
-        createdGroups > 0 ? (completedGroups / createdGroups) * 100 : 0;
+      const completedGroups = events.filter((e) => e.eventType === 'group_completed').length;
+      const createdGroups = events.filter((e) => e.eventType === 'group_created').length;
+      const successRate = createdGroups > 0 ? (completedGroups / createdGroups) * 100 : 0;
 
       // Check if metrics already exist for this date
       const existingMetrics = await this.prisma.platformMetrics.findFirst({
@@ -144,19 +165,18 @@ export class AnalyticsAggregator {
           where: { id: existingMetrics.id },
           data: {
             totalUsers: uniqueUsers.size,
-            activeUsers: events.filter((e) => e.eventType === 'page_view').length > 0 ? uniqueUsers.size : 0,
+            activeUsers:
+              events.filter((e) => e.eventType === 'page_view').length > 0 ? uniqueUsers.size : 0,
             totalGroups: uniqueGroups.size,
-            activeGroups: events.filter((e) => e.eventType === 'group_activity').length > 0
-              ? uniqueGroups.size
-              : 0,
+            activeGroups:
+              events.filter((e) => e.eventType === 'group_activity').length > 0
+                ? uniqueGroups.size
+                : 0,
             totalContributions: contributions,
             totalContributionAmount: contributionTotal,
             totalPayouts: payouts,
             totalPayoutAmount: payoutTotal,
-            averageGroupSize:
-              uniqueGroups.size > 0
-                ? uniqueUsers.size / uniqueGroups.size
-                : 0,
+            averageGroupSize: uniqueGroups.size > 0 ? uniqueUsers.size / uniqueGroups.size : 0,
             successRate,
             totalTransactions: contributions + payouts,
             uniqueWallets: uniqueUsers.size,
@@ -168,19 +188,18 @@ export class AnalyticsAggregator {
           data: {
             date,
             totalUsers: uniqueUsers.size,
-            activeUsers: events.filter((e) => e.eventType === 'page_view').length > 0 ? uniqueUsers.size : 0,
+            activeUsers:
+              events.filter((e) => e.eventType === 'page_view').length > 0 ? uniqueUsers.size : 0,
             totalGroups: uniqueGroups.size,
-            activeGroups: events.filter((e) => e.eventType === 'group_activity').length > 0
-              ? uniqueGroups.size
-              : 0,
+            activeGroups:
+              events.filter((e) => e.eventType === 'group_activity').length > 0
+                ? uniqueGroups.size
+                : 0,
             totalContributions: contributions,
             totalContributionAmount: contributionTotal,
             totalPayouts: payouts,
             totalPayoutAmount: payoutTotal,
-            averageGroupSize:
-              uniqueGroups.size > 0
-                ? uniqueUsers.size / uniqueGroups.size
-                : 0,
+            averageGroupSize: uniqueGroups.size > 0 ? uniqueUsers.size / uniqueGroups.size : 0,
             successRate,
             totalTransactions: contributions + payouts,
             uniqueWallets: uniqueUsers.size,
@@ -188,9 +207,9 @@ export class AnalyticsAggregator {
         });
       }
 
-      console.log(`Platform metrics aggregated for ${date.toISOString().split('T')[0]}`);
+      logger.info(`Platform metrics aggregated for ${date.toISOString().split('T')[0]}`);
     } catch (error) {
-      console.error('Error aggregating platform metrics:', error);
+      logger.error('Error aggregating platform metrics:', error);
     }
   }
 
@@ -214,7 +233,7 @@ export class AnalyticsAggregator {
       });
 
       // Group events by userId
-      const userEvents = new Map<string, any[]>();
+      const userEvents = new Map<string, typeof events>();
       events.forEach((event) => {
         if (event.userId) {
           if (!userEvents.has(event.userId)) {
@@ -232,23 +251,19 @@ export class AnalyticsAggregator {
           (e) => e.eventType === 'group_completed'
         ).length;
         const contributions = userEventList.filter(
-          (e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'contribution'
+          (e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'contribution'
         ).length;
         const contributionAmount = userEventList
           .filter(
-            (e) =>
-              e.eventType === 'transaction' && (e.eventData as any)?.type === 'contribution'
+            (e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'contribution'
           )
-          .reduce((sum, e) => sum + ((e.eventData as any)?.amount || 0), 0);
+          .reduce((sum, e) => sum + eventDataAmount(e.eventData), 0);
 
         const payoutsReceived = userEventList
-          .filter(
-            (e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'payout'
-          )
-          .reduce((sum, e) => sum + ((e.eventData as any)?.amount || 0), 0);
+          .filter((e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'payout')
+          .reduce((sum, e) => sum + eventDataAmount(e.eventData), 0);
 
-        const sessions = new Set(userEventList.map((e) => e.sessionId).filter(Boolean))
-          .size;
+        const sessions = new Set(userEventList.map((e) => e.sessionId).filter(Boolean)).size;
         const pageViews = userEventList.filter((e) => e.eventType === 'page_view').length;
         const interactions = userEventList.length;
 
@@ -298,9 +313,11 @@ export class AnalyticsAggregator {
         }
       }
 
-      console.log(`User metrics aggregated for ${userEvents.size} users on ${date.toISOString().split('T')[0]}`);
+      logger.info(
+        `User metrics aggregated for ${userEvents.size} users on ${date.toISOString().split('T')[0]}`
+      );
     } catch (error) {
-      console.error('Error aggregating user metrics:', error);
+      logger.error('Error aggregating user metrics:', error);
     }
   }
 
@@ -324,7 +341,7 @@ export class AnalyticsAggregator {
       });
 
       // Group events by groupId
-      const groupEvents = new Map<string, any[]>();
+      const groupEvents = new Map<string, typeof events>();
       events.forEach((event) => {
         if (event.groupId) {
           if (!groupEvents.has(event.groupId)) {
@@ -338,32 +355,24 @@ export class AnalyticsAggregator {
       for (const [groupId, groupEventList] of groupEvents.entries()) {
         const members = new Set(groupEventList.map((e) => e.userId).filter(Boolean)).size;
         const contributions = groupEventList.filter(
-          (e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'contribution'
+          (e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'contribution'
         ).length;
         const contributionAmount = groupEventList
           .filter(
-            (e) =>
-              e.eventType === 'transaction' && (e.eventData as any)?.type === 'contribution'
+            (e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'contribution'
           )
-          .reduce((sum, e) => sum + ((e.eventData as any)?.amount || 0), 0);
+          .reduce((sum, e) => sum + eventDataAmount(e.eventData), 0);
 
         const payoutsDistributed = groupEventList
-          .filter((e) => e.eventType === 'transaction' && (e.eventData as any)?.type === 'payout')
-          .reduce((sum, e) => sum + ((e.eventData as any)?.amount || 0), 0);
+          .filter((e) => e.eventType === 'transaction' && eventDataType(e.eventData) === 'payout')
+          .reduce((sum, e) => sum + eventDataAmount(e.eventData), 0);
 
-        const completed = groupEventList.filter(
-          (e) => e.eventType === 'group_completed'
-        ).length;
+        const completed = groupEventList.filter((e) => e.eventType === 'group_completed').length;
 
         const successRate = completed > 0 ? 100 : 0;
-        const avgContribution =
-          contributions > 0 ? contributionAmount / contributions : 0;
-        const newMembers = groupEventList.filter(
-          (e) => e.eventType === 'member_joined'
-        ).length;
-        const churn = groupEventList.filter(
-          (e) => e.eventType === 'member_left'
-        ).length;
+        const avgContribution = contributions > 0 ? contributionAmount / contributions : 0;
+        const newMembers = groupEventList.filter((e) => e.eventType === 'member_joined').length;
+        const churn = groupEventList.filter((e) => e.eventType === 'member_left').length;
 
         // Upsert group metrics
         const existingMetrics = await this.prisma.groupMetrics.findFirst({
@@ -409,9 +418,11 @@ export class AnalyticsAggregator {
         }
       }
 
-      console.log(`Group metrics aggregated for ${groupEvents.size} groups on ${date.toISOString().split('T')[0]}`);
+      logger.info(
+        `Group metrics aggregated for ${groupEvents.size} groups on ${date.toISOString().split('T')[0]}`
+      );
     } catch (error) {
-      console.error('Error aggregating group metrics:', error);
+      logger.error('Error aggregating group metrics:', error);
     }
   }
 }

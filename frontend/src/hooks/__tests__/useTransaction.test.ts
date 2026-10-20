@@ -1,17 +1,11 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useTransaction, explorerUrl, STELLAR_NETWORK } from '../useTransaction';
 
-// The hook is transport-agnostic (execute takes a caller-supplied async fn),
-// so we mock the Stellar SDK call site a real caller would pass in — this
-// proves no live network/SDK call is ever made in tests.
-vi.mock('@stellar/stellar-sdk', () => ({
-  Horizon: {
-    Server: vi.fn().mockImplementation(() => ({
-      submitTransaction: vi.fn(),
-    })),
-  },
-}));
+// Use the shared mock — no live Horizon/RPC calls in unit tests.
+// See frontend/src/__mocks__/@stellar/stellar-sdk.ts for the full stub surface.
+vi.mock('@stellar/stellar-sdk');
 
 describe('explorerUrl', () => {
   it('builds a stellar.expert URL for the configured network', () => {
@@ -76,9 +70,7 @@ describe('useTransaction', () => {
   it('surfaces the rejection reason of a mocked Stellar SDK submitTransaction call', async () => {
     const { Horizon } = await import('@stellar/stellar-sdk');
     const server = new Horizon.Server('https://horizon-testnet.stellar.org');
-    (server.submitTransaction as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('bad_seq')
-    );
+    (server.submitTransaction as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('bad_seq'));
 
     const { result } = renderHook(() => useTransaction());
     await act(async () => {

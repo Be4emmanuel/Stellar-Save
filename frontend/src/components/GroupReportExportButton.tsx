@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import type { DetailedGroup } from '../utils/groupApi';
+
 import { useGroupReportExport } from '../hooks/useGroupReportExport';
+
+import type { DetailedGroup } from '../utils/groupApi';
 
 interface Props {
   group: DetailedGroup;
@@ -38,8 +40,8 @@ export function GroupReportExportButton({ group }: Props) {
             position: 'absolute',
             right: 0,
             top: '110%',
-            background: 'var(--color-bg, #1a1a1a)',
-            border: '1px solid var(--color-border, #444)',
+            background: 'var(--color-bg)',
+            border: '1px solid var(--color-border)',
             borderRadius: 8,
             padding: '1rem',
             minWidth: 260,
@@ -50,11 +52,24 @@ export function GroupReportExportButton({ group }: Props) {
           <p style={{ margin: '0 0 0.75rem', fontWeight: 600, fontSize: '0.9rem' }}>
             Export Group Report
           </p>
-          <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 0.75rem' }}>
+          <p
+            style={{
+              fontSize: '0.75rem',
+              color: 'var(--color-text-secondary)',
+              margin: '0 0 0.75rem',
+            }}
+          >
             {group.name}
           </p>
 
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#9ca3af' }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.8rem',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
             Format
           </label>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -70,13 +85,26 @@ export function GroupReportExportButton({ group }: Props) {
             ))}
           </div>
 
-          <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 0.25rem' }}>
+          <p
+            style={{
+              fontSize: '0.75rem',
+              color: 'var(--color-text-secondary)',
+              margin: '0 0 0.25rem',
+            }}
+          >
             {format === 'csv'
               ? `CSV includes ${group.contributions.length} contribution record(s).`
               : 'PDF includes pool totals, member status, and cycle history.'}
           </p>
 
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.5rem',
+              justifyContent: 'flex-end',
+              marginTop: '0.75rem',
+            }}
+          >
             <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
               Cancel
             </button>

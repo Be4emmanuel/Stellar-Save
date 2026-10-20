@@ -1,19 +1,27 @@
 import { render } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect } from 'vitest';
 
-import { ProfilePage } from '../pages/ProfilePage';
 import { BrowseGroupsPage } from '../pages/BrowseGroupsPage';
+import { ProfilePage } from '../pages/ProfilePage';
 import { WalletContext } from '../wallet/WalletProvider';
 
 expect.extend(toHaveNoViolations);
 
 const mockWallet = {
-  wallets: [], selectedWalletId: 'freighter', status: 'connected' as const,
-  activeAddress: 'GABC1234567890', network: 'testnet', connectedAccounts: [], error: null,
-  refreshWallets: () => {}, connect: async () => {}, disconnect: async () => {},
-  switchWallet: async () => {}, switchAccount: async () => {},
+  wallets: [],
+  selectedWalletId: 'freighter',
+  status: 'connected' as const,
+  activeAddress: 'GABC1234567890',
+  network: 'testnet',
+  connectedAccounts: [],
+  error: null,
+  refreshWallets: () => {},
+  connect: async () => {},
+  disconnect: async () => {},
+  switchWallet: async () => {},
+  switchAccount: async () => {},
 };
 
 function withProviders(ui: React.ReactElement) {

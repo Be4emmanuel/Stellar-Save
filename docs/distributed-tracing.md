@@ -169,6 +169,112 @@ across all services.
 
 ---
 
+## Verified span examples
+
+The following span names and attributes have been tested in
+`backend/src/tests/tracing.test.ts` (issue #1354). Use these exact strings when
+adding new instrumentation so Jaeger queries and Grafana dashboards stay
+consistent.
+
+### Soroban contract-execution spans
+
+These spans appear every time the backend invokes or simulates a Soroban
+contract function via `SorobanClientPool.withClient(fn, op)`.
+
+```
+Span name:  soroban.invoke contribute
+Attributes: rpc.system = "soroban"
+            soroban.function = "contribute"
+
+Span name:  soroban.invoke execute_payout
+Attributes: rpc.system = "soroban"
+            soroban.function = "execute_payout"
+
+Span name:  soroban.invoke create_group
+Attributes: rpc.system = "soroban"
+            soroban.function = "create_group"
+
+Span name:  soroban.invoke join_group
+Attributes: rpc.system = "soroban"
+            soroban.function = "join_group"
+
+# When no function name is provided:
+Span name:  soroban.rpc
+Attributes: rpc.system = "soroban"
+```
+
+### Indexer spans
+
+These spans are created manually around each poll iteration, event processing,
+and database write in `backend/src/contract_event_indexer.ts`.
+
+```
+Span name:  indexer.poll
+Attributes: service = "indexer"
+
+Span name:  indexer.process_event
+Attributes: service    = "indexer"
+            event.type = "<CONTRACT_EVENT_TOPIC>"    e.g. "payout_executed"
+
+Span name:  indexer.db_write
+Attributes: service   = "indexer"
+            db.system = "postgresql"
+```
+
+### withSpan() usage pattern (verified)
+
+All spans are created via the `withSpan()` helper in `backend/src/tracing.ts`.
+The helper:
+- Sets `SpanStatus.OK` on success.
+- Sets `SpanStatus.ERROR` and records the exception on failure.
+- Calls `span.end()` in a `finally` block — no span leaks.
+- Is safe to call concurrently (multiple parallel `withSpan` calls do not
+  interfere with each other).
+
+```typescript
+// Verified in backend/src/tests/tracing.test.ts
+import { withSpan } from './tracing';
+
+// ── Soroban contract call ─────────────────────────────────────────────────────
+const result = await withSpan(
+  'soroban.invoke contribute',
+  { 'rpc.system': 'soroban', 'soroban.function': 'contribute' },
+  async (span) => {
+    span.setAttribute('group.id', String(groupId));
+    return await client.invokeContract(xdr);
+  },
+);
+
+// ── Indexer event processing ──────────────────────────────────────────────────
+await withSpan(
+  'indexer.process_event',
+  { 'service': 'indexer', 'event.type': event.type },
+  async (span) => {
+    span.setAttribute('ledger', String(event.ledger));
+    await storeEvent(event);
+  },
+);
+```
+
+### Async boundary continuity (verified)
+
+A trace started in an outer `withSpan` call propagates correctly across `await`
+boundaries and into nested `withSpan` calls. The trace ID remains stable
+throughout the async chain — verified in
+`backend/src/tests/tracing.test.ts › Async boundary continuity`.
+
+### Running the tracing tests
+
+```bash
+cd backend && npm test -- --testPathPattern=tracing.test
+```
+
+No running collector or Jaeger instance is needed. Tests use the
+`@opentelemetry/api` no-op tracer that is always present when no SDK has been
+registered.
+
+---
+
 ## Files
 
 | Area      | File                                                        |
@@ -181,3 +287,4 @@ across all services.
 | Jaeger    | `monitoring/docker-compose.yml`                             |
 | Dashboard | `monitoring/grafana/dashboards/distributed-tracing.json`    |
 | Datasource| `monitoring/grafana/provisioning/datasources/datasources.yml` |
+| Tests     | `backend/src/tests/tracing.test.ts` (issue #1354)           |

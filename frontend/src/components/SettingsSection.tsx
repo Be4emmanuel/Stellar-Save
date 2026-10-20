@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import { Button } from './Button';
 import { Input } from './Input';
 import './SettingsSection.css';
@@ -21,7 +22,7 @@ export function SettingsSection({ className = '' }: SettingsSectionProps) {
   };
 
   const updateSetting = (key: string, value: string | boolean) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   return (

@@ -2,7 +2,9 @@
  * Insurance pool API helpers (Issue #1012).
  */
 
-const API_BASE = (import.meta.env['VITE_API_BASE_URL'] as string | undefined) ?? '/api/v1';
+import { env } from '../lib/env';
+
+const API_BASE = env.VITE_API_BASE_URL;
 
 export interface InsuranceClaim {
   id: string;
@@ -31,7 +33,7 @@ export async function fetchInsurancePool(groupId: string): Promise<InsurancePool
 
 export async function updateInsuranceSettings(
   groupId: string,
-  payload: { enabled?: boolean; premiumRate?: number; initialBalance?: number },
+  payload: { enabled?: boolean; premiumRate?: number; initialBalance?: number }
 ): Promise<InsurancePool> {
   const res = await fetch(`${API_BASE}/groups/${groupId}/insurance`, {
     method: 'PUT',
@@ -44,7 +46,7 @@ export async function updateInsuranceSettings(
 
 export async function fileClaim(
   groupId: string,
-  payload: { claimant: string; amount: number; reason: string },
+  payload: { claimant: string; amount: number; reason: string }
 ): Promise<InsuranceClaim> {
   const res = await fetch(`${API_BASE}/groups/${groupId}/insurance/claim`, {
     method: 'POST',
@@ -52,7 +54,7 @@ export async function fileClaim(
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Request failed' })) as { error: string };
+    const err = (await res.json().catch(() => ({ error: 'Request failed' }))) as { error: string };
     throw new Error(err.error ?? 'Failed to file claim');
   }
   return res.json() as Promise<InsuranceClaim>;

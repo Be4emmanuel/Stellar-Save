@@ -1,10 +1,18 @@
-import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+
+import { GroupCardActions } from './GroupCardActions';
+import { GroupCardHeader } from './GroupCardHeader';
+import { GroupCardStats } from './GroupCardStats';
+import { usePrefetchGroup } from '../hooks/useGroup';
+import { STALE_TIME } from '../lib/queryClient';
 import { buildRoute } from '../routing/constants';
 import { fetchGroup } from '../utils/groupApi';
+import { GroupCardSkeleton } from './Skeleton/GroupCardSkeleton';
+import { queryKeys } from '../lib/queryKeys';
+import { formatXlm, computeNextPayout } from '../utils/groupCardUtils';
+
 import type { GroupDetail } from '../types/group';
-import { GroupBadge } from './GroupBadge';
-import { usePrefetchGroup } from '../hooks/useGroup';
 
 type Status = 'active' | 'completed' | 'pending' | 'complete';
 
@@ -20,8 +28,6 @@ interface GroupCardStaticProps {
   status?: Status;
   currentCycle?: number;
   nextPayoutDate?: Date | null;
-  description?: string;
-  imageUrl?: string;
   onClick?: () => void;
   onViewDetails?: () => void;
   onJoin?: () => void;
@@ -49,33 +55,6 @@ interface GroupCardFetchProps {
 }
 
 export type GroupCardProps = GroupCardStaticProps | GroupCardFetchProps;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const STROOPS_PER_XLM = 10_000_000;
-
-function formatXlm(stroops: number): string {
-  return (stroops / STROOPS_PER_XLM).toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-}
-
-function computeNextPayout(
-  startedAt: Date | null,
-  currentCycle: number,
-  cycleDurationSecs: number,
-): Date | null {
-  if (!startedAt || cycleDurationSecs <= 0) return null;
-  const nextCycleEnd =
-    startedAt.getTime() + (currentCycle + 1) * cycleDurationSecs * 1000;
-  return new Date(nextCycleEnd);
-}
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return '—';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 // ─── Inner UI ─────────────────────────────────────────────────────────────────
 
@@ -106,8 +85,6 @@ function GroupCardUI({
   status,
   currentCycle,
   nextPayoutDate,
-  description,
-  imageUrl,
   onClick,
   onViewDetails,
   onJoin,
@@ -138,66 +115,19 @@ function GroupCardUI({
 
   const content = (
     <>
-      {imageUrl && (
-        <div className="group-card-image">
-          <img src={imageUrl} alt={groupName} />
-        </div>
-      )}
-
-      <div className="group-card-header">
-        <h3 className="group-card-title">{groupName}</h3>
-        <GroupBadge status={status} />
-      </div>
-
-      {description && (
-        <div className="group-card-description">
-          <p>{description}</p>
-        </div>
-      )}
-
-      <div className="group-card-body">
-        <div className="group-card-stats">
-          <div className="group-card-stat">
-            <span className="group-card-stat-label">Contribution</span>
-            <span className="group-card-stat-value">{contributionAmount}</span>
-          </div>
-          <div className="group-card-stat">
-            <span className="group-card-stat-label">Members</span>
-            <span className="group-card-stat-value">{memberCount}</span>
-          </div>
-          <div className="group-card-stat">
-            <span className="group-card-stat-label">Cycle</span>
-            <span className="group-card-stat-value">{currentCycle}</span>
-          </div>
-          <div className="group-card-stat">
-            <span className="group-card-stat-label">Next Payout</span>
-            <span className="group-card-stat-value group-card-stat-value--date">
-              {formatDate(nextPayoutDate)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="group-card-footer">
-        {onViewDetails && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); onViewDetails(); }}
-          >
-            View Details
-          </Button>
-        )}
-        {onJoin && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); onJoin(); }}
-          >
-            Join Group
-          </Button>
-        )}
-      </div>
+      <GroupCardHeader
+        groupName={groupName}
+        status={status}
+        description={description}
+        imageUrl={imageUrl}
+      />
+      <GroupCardStats
+        contributionAmount={contributionAmount}
+        memberCount={memberCount}
+        currentCycle={currentCycle}
+        nextPayoutDate={nextPayoutDate}
+      />
+      <GroupCardActions onViewDetails={onViewDetails} onJoin={onJoin} groupName={groupName} />
     </>
   );
 
@@ -225,7 +155,7 @@ function GroupCardUI({
       onKeyDown={handleKeyDown}
       aria-label={onClick ? cardLabel : undefined}
     >
-      {cardContent}
+      {content}
     </div>
   );
 }
@@ -245,12 +175,15 @@ function GroupCardUI({
 export function GroupCard(props: GroupCardProps) {
   const isFetchMode = props.groupId !== undefined && props.groupName === undefined;
 
-  // Fetch mode — React Query
+  // Fetch mode — React Query. Uses the same cache key as `useGroup()` /
+  // `usePrefetchGroup()` (queryKeys.groups.detail) so a hover-prefetch or a
+  // GroupDetailPage render for the same group reuses this cache entry
+  // instead of triggering a second network call.
   const { data, isLoading, error } = useQuery({
-    queryKey: ['group', props.groupId],
+    queryKey: queryKeys.groups.detail(props.groupId ?? ''),
     queryFn: () => fetchGroup(props.groupId!) as Promise<GroupDetail | null>,
     enabled: isFetchMode,
-    staleTime: 30_000,
+    staleTime: STALE_TIME.GROUP_STATE,
   });
 
   if (isFetchMode) {

@@ -1,5 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+
 import en from './locales/en.json';
 import fr from './locales/fr.json';
 import yo from './locales/yo.json';
@@ -19,7 +20,8 @@ const resources = {
 };
 
 const stored = typeof window !== 'undefined' ? localStorage.getItem('stellar_save_language') : null;
-const defaultLng: LanguageCode = (stored as LanguageCode) || (navigator?.language?.startsWith('fr') ? 'fr' : 'en');
+const defaultLng: LanguageCode =
+  (stored as LanguageCode) || (navigator?.language?.startsWith('fr') ? 'fr' : 'en');
 
 void i18n.use(initReactI18next).init({
   resources,

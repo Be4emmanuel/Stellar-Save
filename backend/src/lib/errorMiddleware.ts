@@ -1,7 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
-import { AppError, toEnvelope } from './errors';
+
+
+import { statusCodeOf, toEnvelope } from './errors';
 import { attachCorrelationId } from './requestContext';
+
+import type { Request, Response, NextFunction } from 'express';
 
 export function errorMiddleware(
   err: unknown,
@@ -12,7 +15,7 @@ export function errorMiddleware(
   const correlationId = attachCorrelationId(req, res) || randomUUID();
   res.setHeader('x-correlation-id', correlationId);
   const envelope = toEnvelope(err, correlationId);
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
+  const statusCode = statusCodeOf(err);
   res.status(statusCode).json({ error: envelope });
 }
 

@@ -1,13 +1,16 @@
 import crypto from 'crypto';
-import { BackupService, S3Client } from './backup_service';
-import { RecoveryService, RestoreTarget } from './recovery_service';
+
+import { fetchWithCorrelationId } from './lib/http';
+import { logger } from './logger';
 import {
   backupRestoreDrillDuration,
   backupRestoreDrillsTotal,
   backupRestoreLastSuccessfulTimestamp,
 } from './metrics';
-import { logger } from './logger';
-import { fetchWithCorrelationId } from './lib/http';
+import { RecoveryService } from './recovery_service';
+
+import type { BackupService, S3Client } from './backup_service';
+import type { RestoreTarget } from './recovery_service';
 
 export interface RestoreDrillConfig {
   checkIntervalMs: number;
@@ -56,7 +59,7 @@ function createAlert(
   level: 'warning' | 'error',
   message: string,
   backupJobId?: string,
-  run?: RestoreDrillRun,
+  run?: RestoreDrillRun
 ): RestoreDrillAlert {
   return {
     id: crypto.randomUUID(),
@@ -75,8 +78,6 @@ export class BackupRestoreDrill {
   private readonly recovery: RecoveryService;
   private readonly target = new EphemeralRestoreTarget();
   private readonly config: RestoreDrillConfig;
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private running = false;
   private runs: RestoreDrillRun[] = [];
   private alerts: RestoreDrillAlert[] = [];
 
@@ -86,28 +87,30 @@ export class BackupRestoreDrill {
     this.config = config;
   }
 
+  /**
+   * Note: Timer management moved to BackupOrchestrator.
+   * This class now only executes drills when called.
+   * @deprecated Use BackupOrchestrator instead of calling start/stop directly.
+   */
   start(): void {
-    if (this.running) return;
-    this.running = true;
-    void this.runDrill();
-    this.timer = setInterval(() => {
-      void this.runDrill();
-    }, this.config.checkIntervalMs);
-    logger.info('backup restore drill started', {
+    logger.info('backup restore drill start() called - use BackupOrchestrator for timer management', {
       check_interval_ms: this.config.checkIntervalMs,
       max_restore_duration_ms: this.config.maxRestoreDurationMs,
     });
   }
 
+  /**
+   * @deprecated Use BackupOrchestrator instead of calling start/stop directly.
+   */
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-    this.running = false;
-    logger.info('backup restore drill stopped');
+    logger.info('backup restore drill stop() called - timers managed by BackupOrchestrator');
   }
 
+  /**
+   * @deprecated No longer tracked by this class. See BackupOrchestrator for lifecycle.
+   */
   isRunning(): boolean {
-    return this.running;
+    return false;
   }
 
   listRuns(): RestoreDrillRun[] {
@@ -191,7 +194,9 @@ export class BackupRestoreDrill {
       run.integrityChecks.push('checksum-verified', 'payload-parsed', 'record-count-available');
 
       if (!restoredPayload) {
-        return failed(`Restore drill did not materialise an ephemeral snapshot for backup ${latest.id}`);
+        return failed(
+          `Restore drill did not materialise an ephemeral snapshot for backup ${latest.id}`
+        );
       }
 
       const integrityIssues: string[] = [];
@@ -202,11 +207,15 @@ export class BackupRestoreDrill {
         integrityIssues.push('invalid record count');
       }
       if (restored.restoreDurationMs > this.config.maxRestoreDurationMs) {
-        integrityIssues.push(`restore exceeded RTO threshold (${restored.restoreDurationMs}ms > ${this.config.maxRestoreDurationMs}ms)`);
+        integrityIssues.push(
+          `restore exceeded RTO threshold (${restored.restoreDurationMs}ms > ${this.config.maxRestoreDurationMs}ms)`
+        );
       }
 
       if (integrityIssues.length > 0) {
-        return failed(`Restore drill integrity failure for backup ${latest.id}: ${integrityIssues.join('; ')}`);
+        return failed(
+          `Restore drill integrity failure for backup ${latest.id}: ${integrityIssues.join('; ')}`
+        );
       }
 
       run.status = 'passed';

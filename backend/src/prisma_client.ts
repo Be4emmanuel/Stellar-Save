@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
+import { Gauge } from 'prom-client';
+
 import { config } from './config';
 import { logger } from './logger';
-import { Gauge } from 'prom-client';
 import { registry } from './metrics';
 
 // ── Connection-count metric ───────────────────────────────────────────────────
@@ -53,16 +54,21 @@ const prismaSingleton = new PrismaReadReplicaClient();
 
 /** Single managed Prisma instance — import this everywhere instead of `new PrismaClient()`. */
 export const prisma = new Proxy(prismaSingleton.getClient(), {
-  get: (target: any, prop: string) => {
-    if (typeof target[prop] === 'function') {
-      const isWrite =
-        ['create', 'update', 'delete', 'upsert', 'createMany', 'updateMany', 'deleteMany'].some(
-          (m) => prop.endsWith(m)
-        );
+  get: (target: PrismaClient, prop: string) => {
+    if (typeof (target as unknown as Record<string, unknown>)[prop] === 'function') {
+      const isWrite = [
+        'create',
+        'update',
+        'delete',
+        'upsert',
+        'createMany',
+        'updateMany',
+        'deleteMany',
+      ].some((m) => prop.endsWith(m));
       const client = prismaSingleton.getClient(isWrite);
-      return (client as any)[prop]?.bind(client);
+      return (client as unknown as Record<string, unknown>)[prop];
     }
-    return target[prop];
+    return (target as unknown as Record<string, unknown>)[prop];
   },
 }) as PrismaClient;
 

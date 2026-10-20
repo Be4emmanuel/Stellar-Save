@@ -1,230 +1,341 @@
-//! Shared test harness for Stellar-Save contract tests.
+//! Shared test utilities for all contract tests.
 //!
-//! Eliminates repeated `Env::default() / mock_all_auths / register / deploy
-//! token / mint` boilerplate that previously existed in every test module.
+//! This module provides common test helpers to avoid duplication across multiple
+//! test files: environment setup, client initialization, token utilities, and
+//! common test scenario builders.
 //!
-//! # Quick start
-//!
-//! ```rust
-//! use crate::test_utils::TestHarness;
-//!
-//! #[test]
-//! fn my_test() {
-//!     let mut h = TestHarness::new();
-//!     let group_id = h.new_group(10_000_000, 604_800, 5);
-//!     let alice = h.join_member(group_id);
-//!     h.fund_token(&alice, 100);          // 100 XLM
-//!     h.advance_time(604_801);            // skip past one cycle deadline
-//! }
-//! ```
+//! ## Shared Storage Fixtures (issue #1717)
+//! `store_contract_config`, `store_group`, `store_token_config`, `store_test_group`
+//! and `store_test_group_with_status` replace the duplicated local setup code that
+//! previously existed in `admin_actions_tests.rs` and `auto_contribution_tests.rs`.
 
-#[cfg(test)]
-pub use harness::TestHarness;
+#![cfg(test)]
 
-#[cfg(test)]
-mod harness {
-    use soroban_sdk::{
-        testutils::{Address as _, Ledger},
-        token::StellarAssetClient,
-        Address, Env,
-    };
+use soroban_sdk::{
+    testutils::Address as _,
+    token::{StellarAssetClient, TokenClient},
+    Address, Env, String,
+};
 
-    use crate::{
-        payout::PayoutOrder,
-        StellarSaveContract, StellarSaveContractClient,
-    };
+use crate::{StellarSaveContractClient, StellarSaveContract};
 
-    /// One XLM expressed in stroops (the smallest Stellar unit).
-    const STROOPS_PER_XLM: i128 = 10_000_000;
+// ─── Environment & Client Setup ──────────────────────────────────────────────
 
-    /// Default contribution amount used by [`TestHarness::new_group`]: 1 XLM.
-    pub const DEFAULT_CONTRIBUTION: i128 = STROOPS_PER_XLM;
-    /// Default cycle duration: one week in seconds.
-    pub const DEFAULT_CYCLE_DURATION: u64 = 604_800;
-    /// Default maximum group size.
-    pub const DEFAULT_MAX_MEMBERS: u32 = 5;
-    /// Tokens minted to each member automatically by [`TestHarness::join_member`].
-    pub const DEFAULT_MINT_XLM: i128 = 1_000;
+/// Initialize a test environment with default settings.
+///
+/// Sets up a fresh Soroban environment with all authentications mocked.
+///
+/// # Returns
+/// A new `Env` instance ready for testing.
+pub fn create_env() -> Env {
+    let env = Env::default();
+    env.mock_all_auths();
+    env
+}
 
-    /// A self-contained test environment wrapping an [`Env`], a deployed
-    /// `StellarSaveContract`, and a mock Stellar Asset Contract token.
-    ///
-    /// All auth checks are stubbed out (`mock_all_auths`).
-    pub struct TestHarness {
-        /// The Soroban test environment. Exposed so tests can inspect storage,
-        /// advance the ledger directly, or check events.
-        pub env: Env,
-        /// Address of the deployed `StellarSaveContract`.
-        pub contract_id: Address,
-        /// Address of the mock SAC token used as the payment token.
-        pub token: Address,
-        /// A generated creator/admin address available for convenience.
-        pub admin: Address,
+/// Initialize the StellarSave contract and return all necessary test components.
+///
+/// This is the primary setup function for integration tests. It:
+/// - Creates a test environment
+/// - Registers a mock SEP-41 token (Stellar Asset Contract)
+/// - Deploys the StellarSave contract
+/// - Returns all components needed for testing
+///
+/// # Returns
+/// A tuple of `(env, client, token_address, token_client)` where:
+/// - `env`: The Soroban test environment
+/// - `client`: The generated StellarSaveContractClient for contract interaction
+/// - `token_address`: The address of the deployed mock token
+/// - `token_client`: StellarAssetClient for token operations
+pub fn setup<'a>() -> (Env, StellarSaveContractClient<'a>, Address, StellarAssetClient<'a>) {
+    let env = create_env();
+
+    let admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let token = sac.address();
+    let sac_client = StellarAssetClient::new(&env, &token);
+
+    let contract_id = env.register(StellarSaveContract, ());
+    let client = StellarSaveContractClient::new(&env, &contract_id);
+
+    (env, client, token, sac_client)
+}
+
+/// Deploy a fresh mock SEP-41 token (Stellar Asset Contract).
+///
+/// Useful when you need multiple independent token instances or want to
+/// test multi-token scenarios.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+///
+/// # Returns
+/// The address of the newly deployed token contract
+pub fn deploy_mock_token(env: &Env) -> Address {
+    let admin = Address::generate(env);
+    env.register_stellar_asset_contract_v2(admin).address()
+}
+
+// ─── Token Utilities ─────────────────────────────────────────────────────────
+
+/// Mint tokens to an address.
+///
+/// Converts XLM amounts (in whole units) to stroops and mints the specified
+/// quantity to the target address.
+///
+/// # Arguments
+/// * `sac` - StellarAssetClient for the token contract
+/// * `address` - The address to mint tokens to
+/// * `xlm` - Number of XLM to mint (will be converted to stroops)
+pub fn mint(sac: &StellarAssetClient, address: &Address, xlm: i128) {
+    sac.mint(address, &(xlm * crate::xlm::STROOPS_PER_XLM));
+}
+
+/// Get the balance of an address for a token.
+///
+/// # Arguments
+/// * `tc` - TokenClient for the token contract
+/// * `address` - The address to check
+///
+/// # Returns
+/// The balance in stroops
+pub fn get_balance(tc: &TokenClient, address: &Address) -> i128 {
+    tc.balance(address)
+}
+
+/// Convert stroops to XLM (whole units).
+///
+/// # Arguments
+/// * `stroops` - Amount in stroops
+///
+/// # Returns
+/// Amount in XLM
+pub fn stroops_to_xlm(stroops: i128) -> i128 {
+    stroops / crate::xlm::STROOPS_PER_XLM
+}
+
+// ─── Group Setup Utilities ───────────────────────────────────────────────────
+
+/// Create a test group with 3 members and return all details.
+///
+/// This is a convenience builder that:
+/// - Creates a group with the specified parameters
+/// - Generates three addresses (alice, bob, carol)
+/// - Mints tokens to each member
+/// - Adds all members to the group
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `client` - The StellarSaveContractClient
+/// * `sac` - StellarAssetClient for minting tokens
+/// * `contribution_amount` - Required contribution per cycle (in stroops)
+/// * `cycle_duration` - Duration of each cycle (in seconds)
+/// * `initial_balance_xlm` - Initial balance to mint to each member (in XLM)
+///
+/// # Returns
+/// A tuple of `(group_id, alice_address, bob_address, carol_address)`
+pub fn setup_3_member_group_with_params(
+    env: &Env,
+    client: &StellarSaveContractClient,
+    sac: &StellarAssetClient,
+    contribution_amount: i128,
+    cycle_duration: u32,
+    initial_balance_xlm: i128,
+) -> (u64, Address, Address, Address) {
+    let group_id = client.create_group(&contribution_amount, &cycle_duration, &3u32);
+
+    let alice = Address::generate(env);
+    let bob = Address::generate(env);
+    let carol = Address::generate(env);
+
+    mint(sac, &alice, initial_balance_xlm);
+    mint(sac, &bob, initial_balance_xlm);
+    mint(sac, &carol, initial_balance_xlm);
+
+    client.join_group(&group_id, &alice);
+    client.join_group(&group_id, &bob);
+    client.join_group(&group_id, &carol);
+
+    (group_id, alice, bob, carol)
+}
+
+/// Create a test group with 3 members using default parameters.
+///
+/// Uses standard parameters:
+/// - Contribution: 10 XLM (100,000,000 stroops)
+/// - Cycle duration: 10 seconds
+/// - Initial balance: 100 XLM per member
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `client` - The StellarSaveContractClient
+/// * `sac` - StellarAssetClient for minting tokens
+///
+/// # Returns
+/// A tuple of `(group_id, alice_address, bob_address, carol_address)`
+pub fn setup_3_member_group(
+    env: &Env,
+    client: &StellarSaveContractClient,
+    sac: &StellarAssetClient,
+) -> (u64, Address, Address, Address) {
+    let contribution = 10 * crate::xlm::STROOPS_PER_XLM;
+    setup_3_member_group_with_params(env, client, sac, contribution, 10u32, 100)
+}
+
+/// Generate a new test address.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+///
+/// # Returns
+/// A new unique address
+pub fn generate_address(env: &Env) -> Address {
+    Address::generate(env)
+}
+
+/// Batch-generate multiple test addresses.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `count` - Number of addresses to generate
+///
+/// # Returns
+/// A vector of unique addresses
+pub fn generate_addresses(env: &Env, count: usize) -> Vec<Address> {
+    let mut addresses = Vec::new();
+    for _ in 0..count {
+        addresses.push(Address::generate(env));
     }
+    addresses
+}
 
-    impl TestHarness {
-        // ── Construction ─────────────────────────────────────────────────────
+// ─── String Utilities ────────────────────────────────────────────────────────
 
-        /// Create a fresh harness with:
-        /// - A default `Env` with all auths mocked.
-        /// - A deployed `StellarSaveContract`.
-        /// - A deployed mock Stellar Asset Contract (SAC) token.
-        /// - An admin address with `DEFAULT_MINT_XLM * 10` tokens pre-minted.
-        pub fn new() -> Self {
-            let env = Env::default();
-            env.mock_all_auths();
+/// Create a test string with the given content.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `content` - The string content
+///
+/// # Returns
+/// A Soroban String instance
+pub fn create_string(env: &Env, content: &str) -> String {
+    String::from_str(env, content)
+}
 
-            // Deploy mock SAC token
-            let token_admin = Address::generate(&env);
-            let sac = env.register_stellar_asset_contract_v2(token_admin.clone());
-            let token = sac.address();
+// ─── Shared Storage Fixtures (issue #1717) ───────────────────────────────────
+//
+// The following helpers centralise test-setup code that was previously
+// duplicated between admin_actions_tests.rs and auto_contribution_tests.rs
+// (and any future test module that needs the same state seeded).
 
-            // Deploy contract
-            let contract_id = env.register(StellarSaveContract, ());
-
-            // Generate a convenience admin address and give it some tokens
-            let admin = Address::generate(&env);
-            StellarAssetClient::new(&env, &token)
-                .mint(&admin, &(DEFAULT_MINT_XLM * 10 * STROOPS_PER_XLM));
-
-            // Set a non-zero initial timestamp so deadline arithmetic works
-            env.ledger().set_timestamp(1_000);
-
-            TestHarness { env, contract_id, token, admin }
-        }
-
-        // ── Contract client ───────────────────────────────────────────────────
-
-        /// Return a fresh `StellarSaveContractClient` bound to this harness.
-        ///
-        /// A new client is returned each time because the lifetime of
-        /// `StellarSaveContractClient<'_>` is tied to the borrow of `self.env`.
-        pub fn client(&self) -> StellarSaveContractClient<'_> {
-            StellarSaveContractClient::new(&self.env, &self.contract_id)
-        }
-
-        // ── Group helpers ─────────────────────────────────────────────────────
-
-        /// Create a group with the harness token and return its `group_id`.
-        ///
-        /// Uses `self.admin` as the creator. Grace period is 0; payout order
-        /// is [`PayoutOrder::Sequential`].
-        ///
-        /// # Arguments
-        /// * `contribution_amount` – Amount each member pays per cycle (stroops).
-        /// * `cycle_duration`      – Length of a cycle in seconds.
-        /// * `max_members`         – Maximum number of members the group accepts.
-        pub fn new_group(
-            &self,
-            contribution_amount: i128,
-            cycle_duration: u64,
-            max_members: u32,
-        ) -> u64 {
-            self.client().create_group(
-                &self.admin,
-                &contribution_amount,
-                &cycle_duration,
-                &max_members,
-                &self.token,
-                &0u64,
-                &PayoutOrder::Sequential,
-            )
-        }
-
-        /// Shorthand for [`new_group`] using the default contribution/cycle/size.
-        pub fn new_default_group(&self) -> u64 {
-            self.new_group(DEFAULT_CONTRIBUTION, DEFAULT_CYCLE_DURATION, DEFAULT_MAX_MEMBERS)
-        }
-
-        // ── Member helpers ────────────────────────────────────────────────────
-
-        /// Generate a new address, mint `DEFAULT_MINT_XLM` XLM to it, and
-        /// join it to `group_id`. Returns the new member's address.
-        pub fn join_member(&self, group_id: u64) -> Address {
-            let member = Address::generate(&self.env);
-            self.fund_token(&member, DEFAULT_MINT_XLM);
-            self.client().join_group(&group_id, &member, &None);
-            member
-        }
-
-        /// Generate a new address, mint `xlm_amount` XLM to it, and join it to
-        /// `group_id`. Returns the new member's address.
-        pub fn join_member_with_funds(&self, group_id: u64, xlm_amount: i128) -> Address {
-            let member = Address::generate(&self.env);
-            self.fund_token(&member, xlm_amount);
-            self.client().join_group(&group_id, &member, &None);
-            member
-        }
-
-        // ── Token helpers ─────────────────────────────────────────────────────
-
-        /// Mint `xlm_amount` XLM (converted to stroops) to `address`.
-        pub fn fund_token(&self, address: &Address, xlm_amount: i128) {
-            StellarAssetClient::new(&self.env, &self.token)
-                .mint(address, &(xlm_amount * STROOPS_PER_XLM));
-        }
-
-        /// Mint an exact `stroops` amount to `address` (no XLM conversion).
-        pub fn fund_stroops(&self, address: &Address, stroops: i128) {
-            StellarAssetClient::new(&self.env, &self.token).mint(address, &stroops);
-        }
-
-        // ── Time helpers ──────────────────────────────────────────────────────
-
-        /// Advance the ledger timestamp by `seconds`.
-        pub fn advance_time(&self, seconds: u64) {
-            let current = self.env.ledger().timestamp();
-            self.env.ledger().set_timestamp(current + seconds);
-        }
-
-        /// Set the ledger timestamp to an absolute value.
-        pub fn set_time(&self, timestamp: u64) {
-            self.env.ledger().set_timestamp(timestamp);
-        }
-
-        // ── Composite helpers ─────────────────────────────────────────────────
-
-        /// Create a group, join `member_count` members to it, activate it, and
-        /// assign sequential payout positions. Returns `(group_id, members)`.
-        ///
-        /// This is the minimum setup required to run contribution / payout tests.
-        pub fn setup_active_group(
-            &self,
-            contribution_amount: i128,
-            cycle_duration: u64,
-            member_count: u32,
-        ) -> (u64, Vec<Address>) {
-            use soroban_sdk::Vec as SdkVec;
-
-            let group_id = self.new_group(contribution_amount, cycle_duration, member_count);
-            let mut members = std::vec::Vec::new();
-
-            // Join the admin as the first member
-            self.fund_token(&self.admin, DEFAULT_MINT_XLM);
-            self.client().join_group(&group_id, &self.admin, &None);
-            members.push(self.admin.clone());
-
-            // Join remaining members
-            for _ in 1..member_count {
-                let m = self.join_member(group_id);
-                members.push(m);
-            }
-
-            // Activate and assign positions
-            self.client().activate_group(&group_id, &self.admin, &member_count);
-            self.client().assign_payout_positions(
-                &group_id,
-                &self.admin,
-                &crate::AssignmentMode::Sequential,
-            );
-
-            (group_id, members)
-        }
+/// Build a minimal ContractConfig with the given admin address.
+///
+/// All limits are set to permissive defaults so tests focus on the
+/// feature under test rather than limit validation.
+///
+/// # Arguments
+/// * `admin` - The address that will act as protocol admin
+pub fn make_contract_config(admin: &Address) -> ContractConfig {
+    ContractConfig {
+        admin: admin.clone(),
+        min_contribution: 1_000_000,
+        max_contribution: 1_000_000_000_000,
+        min_members: 2,
+        max_members: 20,
+        min_cycle_duration: 86_400,
+        max_cycle_duration: 2_592_000,
+        treasury: None,
+        creation_fee: 0,
     }
+}
 
-    impl Default for TestHarness {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
+/// Persist a ContractConfig built with `make_contract_config` into test storage.
+///
+/// # Arguments
+/// * `env`   - The Soroban environment
+/// * `admin` - The address that will act as protocol admin
+pub fn store_contract_config(env: &Env, admin: &Address) {
+    env.storage().persistent().set(
+        &StorageKeyBuilder::contract_config(),
+        &make_contract_config(admin),
+    );
+}
+
+/// Persist a `Group` record and its `GroupStatus` into test storage.
+///
+/// Writes both the group data key and the separate status key so callers do
+/// not have to remember to set both records.
+pub fn store_group(env: &Env, group: &Group, status: GroupStatus) {
+    env.storage()
+        .persistent()
+        .set(&StorageKeyBuilder::group_data(group.id), group);
+    env.storage()
+        .persistent()
+        .set(&StorageKeyBuilder::group_status(group.id), &status);
+}
+
+/// Persist a 7-decimal `TokenConfig` for `group_id` into test storage.
+pub fn store_token_config(env: &Env, group_id: u64, token: &Address) {
+    env.storage().persistent().set(
+        &StorageKeyBuilder::group_token_config(group_id),
+        &TokenConfig {
+            token_address: token.clone(),
+            token_decimals: 7,
+        },
+    );
+}
+
+/// Persist a minimal `Group` record into test storage.
+///
+/// Only the bare-minimum fields needed for most admin / non-contribution tests
+/// are seeded here. The group starts with default parameters and no members.
+///
+/// # Arguments
+/// * `env`      - The Soroban environment
+/// * `group_id` - Numeric identifier for the group
+/// * `creator`  - Address of the group creator / owner
+pub fn store_test_group(env: &Env, group_id: u64, creator: &Address) {
+    let g = Group::new(
+        env,
+        group_id,
+        creator.clone(),
+        1_000_000,
+        604_800,
+        5,
+        2,
+        1000,
+        0,
+    );
+    env.storage()
+        .persistent()
+        .set(&StorageKeyBuilder::group_data(group_id), &g);
+}
+
+/// Persist a minimal `Group` (see `store_test_group`) together with the given
+/// `GroupStatus` into test storage.
+///
+/// # Arguments
+/// * `env`      - The Soroban environment
+/// * `group_id` - Numeric identifier for the group
+/// * `creator`  - Address of the group creator / owner
+/// * `status`   - The initial `GroupStatus` to assign
+pub fn store_test_group_with_status(
+    env: &Env,
+    group_id: u64,
+    creator: &Address,
+    status: GroupStatus,
+) {
+    let g = Group::new(
+        env,
+        group_id,
+        creator.clone(),
+        1_000_000,
+        604_800,
+        5,
+        2,
+        1000,
+        0,
+    );
+    store_group(env, &g, status);
 }

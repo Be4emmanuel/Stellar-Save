@@ -5,7 +5,7 @@
 - **Production:** `https://api.stellar-save.app`
 - **Local Development:** `http://localhost:3001`
 
-> This interactive API reference is generated from the OpenAPI specification. For contract-level API documentation, see [Contract API Reference](../contract-api-reference.md).
+> This interactive API reference is generated from the OpenAPI specification. For contract-level API documentation, see [Contract API Reference](../contract-api-reference.md) or the [Smart Contract API Reference](../api-reference.md).
 
 ## Quick Start
 

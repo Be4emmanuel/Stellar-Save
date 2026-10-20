@@ -148,10 +148,82 @@ If Lighthouse scores are low:
    - Lazy loading non-critical components
 3. **Verify** with local Lighthouse audits
 
+## Regression Gate
+
+The regression gate (`scripts/benchmark_regression.sh`) is an automated check
+that fails the build whenever a contract call's benchmark regresses beyond the
+configured threshold (default: **+10%**).
+
+### How it works
+
+1. Runs `cargo test ... benchmark -- --nocapture --test-threads=1` to collect
+   CPU instruction counts per function.
+2. Parses the output for lines matching `bench_<name>: cpu_insns = <N>`.
+3. Compares against `scripts/benchmark_baseline.json`.
+4. Fails with exit code 1 if any function's delta exceeds the threshold.
+5. Writes `performance-results/benchmark-regression-report.json`.
+
+### Baseline file
+
+`scripts/benchmark_baseline.json` stores the reference CPU instruction counts
+per function. It is committed to the repository and versioned.
+
+```json
+{
+  "version": "1",
+  "regression_threshold_pct": 10,
+  "functions": {
+    "create_group":      { "baseline_cpu_insns": 48234,  "group_size": 1  },
+    "contribute":        { "baseline_cpu_insns": 118600, "group_size": 10 },
+    "execute_payout":    { "baseline_cpu_insns": 88500,  "group_size": 10 },
+    "join_group":        { "baseline_cpu_insns": 78450,  "group_size": 5  },
+    "get_group":         { "baseline_cpu_insns": 14820,  "group_size": 1  },
+    "is_member":         { "baseline_cpu_insns": 11960,  "group_size": 20 },
+    "get_group_members": { "baseline_cpu_insns": 43780,  "group_size": 20 }
+  }
+}
+```
+
+### Running locally
+
+```bash
+# Run benchmarks + compare against baseline
+bash scripts/benchmark_regression.sh
+
+# Skip re-running benchmarks (use a pre-existing log)
+BENCHMARK_LOG=performance-results/gas-benchmarks.log \
+  bash scripts/benchmark_regression.sh --dry-run
+
+# Override the threshold
+REGRESSION_THRESHOLD_PCT=15 bash scripts/benchmark_regression.sh
+```
+
+### Updating the baseline
+
+When a code change **intentionally** improves or changes performance, update
+the baseline to avoid false positives on future PRs:
+
+```bash
+bash scripts/benchmark_regression.sh --update-baseline
+# Review the diff, then commit:
+git add scripts/benchmark_baseline.json
+git commit -m "perf: update benchmark baseline after <change>"
+```
+
+### CI behavior
+
+The `regression-gate` job in `.github/workflows/performance-benchmarks.yml`:
+- Runs after `gas-benchmarks` on every push, PR, and weekly schedule.
+- Uses the downloaded benchmark log (fast) or re-runs benchmarks if unavailable.
+- Posts a comment on PRs listing regressions and the update command.
+- Uploads `benchmark-regression-report.json` as a CI artifact (90-day retention).
+- Marks the workflow as **failed** if any regression is detected.
+
 ## Configuration
 
 Performance thresholds and settings are defined in:
 
+- `scripts/benchmark_baseline.json`: Contract function baselines and regression threshold
 - `docs/performance-config.json`: Threshold configurations
 - `.github/workflows/performance-benchmarks.yml`: Workflow definition
 - `frontend/lighthouse-config.js`: Lighthouse audit settings

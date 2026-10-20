@@ -1,28 +1,19 @@
-# Stellar-Save — Rotational Savings on Stellar
+# Project
 
-[![Coverage](https://codecov.io/gh/Xoulomon/Stellar-Save/branch/main/graph/badge.svg)](https://codecov.io/gh/Xoulomon/Stellar-Save)
-[![Coverage workflow](https://github.com/Xoulomon/Stellar-Save/actions/workflows/coverage.yml/badge.svg)](https://github.com/Xoulomon/Stellar-Save/actions/workflows/coverage.yml)
-[![frontend](https://codecov.io/gh/Xoulomon/Stellar-Save/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/Xoulomon/Stellar-Save?flags[0]=frontend)
-[![contracts](https://codecov.io/gh/Xoulomon/Stellar-Save/branch/main/graph/badge.svg?flag=contracts)](https://codecov.io/gh/Xoulomon/Stellar-Save?flags[0]=contracts)
-[![backend](https://codecov.io/gh/Xoulomon/Stellar-Save/branch/main/graph/badge.svg?flag=backend)](https://codecov.io/gh/Xoulomon/Stellar-Save?flags[0]=backend)
+A full-stack application with a backend API (REST + GraphQL) and a frontend client.
 
-**A decentralized rotational savings and credit association (ROSCA) built on Stellar Soroban smart contracts.**
+## Documentation
 
-Stellar Save is a traditional community-based savings system where members contribute a fixed amount regularly, and each member receives the total pool on a rotating basis. This project brings this time-tested financial mechanism to the blockchain, making it transparent, trustless, and accessible globally.
+- [Getting Started](docs/guides/getting-started.md)
+- [Backend Service Map](backend/docs/service-map.md)
+- [API Reference](docs/api/README.md) — external REST/GraphQL reference, versioning and deprecation policy
+- [Contracts](contracts/README.md)
 
-## 🎯 What is Stellar-Save?
+## API Reference
 
-Stellar-Save is a rotating savings and credit association (ROSCA) common in Nigeria and across Africa. Members:
-- Form a group with a fixed contribution amount
-- Contribute the same amount each cycle (e.g., weekly or monthly)
-- Take turns receiving the full pool of contributions
-- Build trust and financial discipline within communities
+The external API reference for the backend REST and GraphQL endpoints is published under [`docs/api/`](docs/api/README.md). It is generated from the existing backend route and schema definitions and includes the versioning and deprecation policy for external consumers.
 
-**This Soroban implementation makes Stellar-Save:**
-- ✅ Trustless (no central coordinator needed)
-- ✅ Transparent (all transactions on-chain)
-- ✅ Accessible (anyone with a Stellar wallet can join)
-- ✅ Programmable (automated payouts, no manual coordination)
+## Repository Layout
 
 ## 🏗️ Architecture
 
@@ -54,91 +45,41 @@ For detailed architecture documentation, see [docs/architecture.md](docs/archite
 - **Token Ready**: Architecture supports custom Stellar tokens (roadmap item)
 - **Transparent**: All contributions and payouts are verifiable on-chain
 
-## 🛠️ Quick Start
+## 🛠️ Quick Start & Workspace Guides
 
-### Prerequisites
+To get started quickly, follow the dedicated setup guides for each component of the Stellar-Save monorepo:
 
-- [Rust](https://www.rust-lang.org/tools/install) (1.70+)
-- [Soroban CLI](https://soroban.stellar.org/docs/getting-started/setup)
-- [Stellar CLI](https://developers.stellar.org/docs/tools/stellar-cli)
+- 🚀 **Smart Contracts**: See [contracts/stellar-save/src/lib.rs](contracts/stellar-save/src/lib.rs) and the [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for smart contract API documentation.
+- 💻 **Frontend Web App**: See [frontend/README.md](frontend/README.md) for React/TypeScript setup, environment configuration (`VITE_*`), MUI theme tokens, and local development commands.
+- 📱 **Mobile Application**: See [mobile/README.md](mobile/README.md) for Expo React Native setup, iOS/Android emulator instructions, and mobile architecture.
+- 🛠️ **Scripts & Tooling**: See [scripts/README.md](scripts/README.md) for build (`build.sh`), test (`test.sh`), and deployment (`deploy_testnet.sh`, `deploy_mainnet.sh`) scripts.
+- ⚙️ **Backend Service**: See [backend/README.md](backend/README.md) for server setup, environment variables schema, and indexer configuration.
 
-### Build
+### Common Development Commands
 
 ```bash
+# Clone the repository
+git clone https://github.com/Xoulomon/Stellar-Save.git
+cd Stellar-Save
+
+# Install workspace dependencies & git hooks (pnpm is the only supported package manager)
+corepack enable
+pnpm install
+
+# Build Soroban smart contracts
 ./scripts/build.sh
-```
 
-### Test
-
-```bash
+# Run all test suites across smart contracts and web frontend
 ./scripts/test.sh
-```
-
-### Setup Environment
-
-1. Copy the example environment file:
-```bash
-cp .env.example .env
-```
-
-2. Fill in the values for your environment. The backend validates all variables at startup using a [zod](https://zod.dev) schema in `backend/src/config.ts`. If a required variable is missing or malformed the server exits immediately with a descriptive error.
-
-**Backend variables** (all have sensible defaults for local development):
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `NODE_ENV` | no | `development` | `development` / `test` / `production` |
-| `PORT` | no | `3001` | API server port |
-| `ADMIN_SECRET` | **yes (prod)** | `super-secret-admin-key` | `x-admin-secret` header value |
-| `STELLAR_NETWORK` | no | `testnet` | `testnet` / `mainnet` / `futurenet` / `standalone` |
-| `STELLAR_RPC_URL` | no | testnet RPC | Soroban RPC endpoint |
-| `STELLAR_NETWORK_PASSPHRASE` | no | testnet passphrase | Stellar network passphrase |
-| `BACKUP_ENABLED` | no | `false` | Enable backup scheduler & monitor |
-| `BACKUP_S3_BUCKET` | no | `stellar-save-backups` | S3 bucket for backups |
-| `BACKUP_RETENTION_DAYS` | no | `30` | Days to keep backups |
-| `BACKUP_ALERT_WEBHOOK_URL` | no | — | Webhook for backup alerts |
-| `BACKUP_DRILL_ENABLED` | no | `false` | Enable automated restore drills |
-| `BACKUP_DRILL_INTERVAL_MS` | no | `86400000` | Restore drill cadence in ms |
-| `BACKUP_DRILL_MAX_DURATION_MS` | no | `300000` | Restore RTO threshold in ms |
-| `AWS_REGION` | no | `us-east-1` | AWS region (needed when backup enabled) |
-| `AWS_ACCESS_KEY_ID` | no | — | AWS credentials (needed when backup enabled) |
-| `AWS_SECRET_ACCESS_KEY` | no | — | AWS credentials (needed when backup enabled) |
-| `ELASTICSEARCH_NODE` | no | `http://localhost:9200` | Elasticsearch endpoint |
-| `ELASTICSEARCH_USERNAME` | no | `elastic` | Elasticsearch username |
-| `ELASTICSEARCH_PASSWORD` | no | `changeme` | Elasticsearch password |
-
-**Frontend variables** (prefixed `VITE_`, exposed to the browser — no secrets):
-
-```bash
-VITE_STELLAR_NETWORK=testnet
-VITE_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
-VITE_CONTRACT_GUESS_THE_NUMBER=<your-contract-id>
-VITE_CONTRACT_FUNGIBLE_ALLOWLIST=<your-contract-id>
-VITE_CONTRACT_NFT_ENUMERABLE=<your-contract-id>
-```
-
-3. Network configurations are defined in `environments.toml`:
-   - `testnet` - Stellar testnet
-   - `mainnet` - Stellar mainnet
-   - `futurenet` - Stellar futurenet
-   - `standalone` - Local development
-
-### Deploy to Testnet
-
-```bash
-# Configure your testnet identity first
-stellar keys generate deployer --network testnet
-
-# Deploy
-./scripts/deploy_testnet.sh
 ```
 
 ### Run Demo
 
-Follow the step-by-step guide in [demo/demo-script.md](demo/demo-script.md)
+Follow the step-by-step guide in [demo/demo-script.md](demo/demo-script.md).
 
 ## 📖 Documentation
 
+- [Local Development Setup](docs/local-development-setup.md) — clone-to-running-app guide for backend, frontend, contracts, and mobile
 - [User Guide](docs/user-guide.md)
 - [Architecture Overview](docs/architecture.md)
 - [Public API Reference](docs/api/interactive-api-reference.md) — REST API with code examples
@@ -308,3 +249,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Built with ❤️ for financial inclusion on Stellar**
+
+## Handsoff notes
+
+<!-- handsoff-issue-1684 -->
+- #1684: [Backend] Remove deprecated/legacy authentication code paths
+
+<!-- handsoff-issue-1685 -->
+- #1685: [Backend] Extract rate limiting logic into a single reusable middleware
+
+<!-- handsoff-issue-1704 -->
+- #1704: [Backend] Remove duplicate RPC failover logic now redundant with issue #1559 fix
+
+<!-- handsoff-issue-1706 -->
+- #1706: [Smart Contracts] Split contract.rs entrypoint into focused modules
+
+<!-- handsoff-issue-1868 -->
+- #1868: [Backend] Move `analytics_service.ts` (762 lines) into `modules/analytics`

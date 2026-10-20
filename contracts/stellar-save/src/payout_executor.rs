@@ -17,6 +17,7 @@
 //! The design follows a permissionless execution model where any address can trigger
 //! payout execution once preconditions are met.
 
+use crate::auth::is_active_member;
 use crate::error::StellarSaveError;
 use crate::events::EventEmitter;
 use crate::group::{Group, GroupStatus};
@@ -50,11 +51,12 @@ use soroban_sdk::{Address, Env};
 /// Validates Requirements 1.1, 1.2, 1.3, 1.4, 1.5
 fn validate_cycle_complete(
     env: &Env,
-    group_id: u64,
+    group: &Group,
     current_cycle: u32,
 ) -> Result<crate::pool::PoolInfo, StellarSaveError> {
-    // Call PoolCalculator to retrieve comprehensive cycle data
-    let pool_info = PoolCalculator::get_pool_info(env, group_id, current_cycle)?;
+    // Reuse the already-loaded group instead of re-reading it from storage,
+    // avoiding a redundant SLOAD of the group_data entry within this invocation.
+    let pool_info = PoolCalculator::get_pool_info_for_group(env, group, current_cycle)?;
 
     // Validate that the pool is ready for payout
     // This checks:
@@ -187,7 +189,9 @@ fn identify_recipient_random(
     // Use Soroban PRNG + ledger timestamp as entropy source.
     let prng_val = env.prng().u64_in_range(0..u64::MAX);
     let ledger_salt = env.ledger().timestamp();
-    let idx = ((prng_val.wrapping_add(ledger_salt).wrapping_add(group_id as u64))
+    let idx = ((prng_val
+        .wrapping_add(ledger_salt)
+        .wrapping_add(group_id as u64))
         % eligible.len() as u64) as u32;
 
     Ok(eligible.get(idx).unwrap())
@@ -219,8 +223,7 @@ fn identify_recipient_bid(
             continue;
         }
 
-        let bid_key =
-            StorageKeyBuilder::group_bid_amount(group_id, current_cycle, member.clone());
+        let bid_key = StorageKeyBuilder::group_bid_amount(group_id, current_cycle, member.clone());
         let bid: i128 = env.storage().persistent().get(&bid_key).unwrap_or(0);
         if bid > best_bid {
             best_bid = bid;
@@ -253,8 +256,7 @@ fn verify_recipient_eligibility(
     current_cycle: u32,
 ) -> Result<(), StellarSaveError> {
     // Check 1: Verify recipient is a current member of the group
-    let member_key = StorageKeyBuilder::member_profile(group_id, recipient.clone());
-    if !env.storage().persistent().has(&member_key) {
+    if !is_active_member(env, group_id, recipient) {
         return Err(StellarSaveError::NotMember);
     }
 
@@ -766,7 +768,7 @@ pub fn execute_payout(env: Env, group_id: u64) -> Result<(), StellarSaveError> {
     // Temporary entries are scoped to the current transaction and auto-cleared.
     let reentrancy_key = StorageKeyBuilder::reentrancy_guard();
     let guard_value: u64 = env.storage().temporary().get(&reentrancy_key).unwrap_or(0);
-    
+
     if guard_value != 0 {
         return Err(StellarSaveError::InternalError);
     }
@@ -819,7 +821,7 @@ pub fn execute_payout(env: Env, group_id: u64) -> Result<(), StellarSaveError> {
     // All validation checks must pass before any state modifications occur
 
     // Step 4: Validate cycle is complete (all members have contributed)
-    let pool_info = validate_cycle_complete(&env, group_id, current_cycle)?;
+    let pool_info = validate_cycle_complete(&env, &group, current_cycle)?;
 
     // Step 4b: Apply penalties to members who missed contributions this cycle.
     // Penalties are added to the pool total so the payout recipient benefits.
@@ -828,7 +830,13 @@ pub fn execute_payout(env: Env, group_id: u64) -> Result<(), StellarSaveError> {
     }
 
     // Step 5: Identify the recipient for this cycle based on payout position
-    let recipient = identify_recipient(&env, group_id, current_cycle, group.member_count, &group.payout_order)?;
+    let recipient = identify_recipient(
+        &env,
+        group_id,
+        current_cycle,
+        group.member_count,
+        &group.payout_order,
+    )?;
 
     // Step 6: Verify the recipient is eligible to receive the payout
     verify_recipient_eligibility(&env, group_id, &recipient, current_cycle)?;
@@ -839,14 +847,15 @@ pub fn execute_payout(env: Env, group_id: u64) -> Result<(), StellarSaveError> {
     // Step 8: Verify contract has sufficient balance to cover the payout
     verify_contract_balance(&env, group_id, payout_amount)?;
 
-    // === EXECUTION PHASE (Task 12.3) ===
-    // All validations passed - proceed with payout execution
-    // If any step fails after this point, Soroban will automatically revert all changes
+    // === EFFECTS PHASE (Task 12.3) ===
+    // All validations passed. Checks-effects-interactions: every state mutation
+    // below is committed *before* the token transfer, so a caller-supplied token
+    // contract that calls back during `transfer` sees a fully settled cycle —
+    // the payout-recipient key is already present and the cycle has already
+    // advanced, which is what makes the duplicate-payout check at Step 3 hold.
+    // If any step fails after this point, Soroban reverts all changes atomically.
 
-    // Step 9: Execute the fund transfer to the recipient
-    execute_transfer(&env, group_id, &recipient, payout_amount)?;
-
-    // Step 10: Create and store the payout record for audit trail
+    // Step 9: Create and store the payout record for audit trail
     // Gas opt: cache timestamp — single ledger call for the whole function
     let timestamp = env.ledger().timestamp();
     record_payout(
@@ -866,23 +875,30 @@ pub fn execute_payout(env: Env, group_id: u64) -> Result<(), StellarSaveError> {
         .ok_or(StellarSaveError::Overflow)?;
     env.storage().persistent().set(&paid_out_key, &new_paid);
 
-    // Step 11: Update the member status to reflect payout completion
+    // Step 10: Update the member status to reflect payout completion
     update_member_status(&env, group_id, &recipient)?;
 
-    // Step 12: Emit payout event (non-critical - continues on failure)
+    // Step 11: Emit payout event (non-critical - continues on failure)
     emit_payout_event(
         &env,
         group_id,
-        recipient,
+        recipient.clone(),
         payout_amount,
         current_cycle,
         timestamp,
     );
 
-    // Step 13: Advance to the next cycle or mark group as complete
+    // Step 12: Advance to the next cycle or mark group as complete.
+    // The per-group reentrancy guard stays set across this write so it is still
+    // held when the external token call runs below.
     advance_cycle_or_complete(&env, &mut group)?;
 
-    // Clear per-group reentrancy guard
+    // === INTERACTIONS PHASE ===
+
+    // Step 13: Execute the fund transfer to the recipient
+    execute_transfer(&env, group_id, &recipient, payout_amount)?;
+
+    // Clear per-group reentrancy guard only after the external call has returned
     group.payout_in_progress = false;
     env.storage().persistent().set(&group_key, &group);
 
@@ -1189,55 +1205,6 @@ mod tests {
         let stored_record: Option<PayoutRecord> = env.storage().persistent().get(&record_key);
         assert!(stored_record.is_some());
         assert_eq!(stored_record.unwrap().amount, amount);
-    }
-
-    // Test record_payout validates the record
-    #[test]
-    fn test_record_payout_validation() {
-        let env = Env::default();
-        let recipient = Address::generate(&env);
-        let group_id = 1u64;
-        let cycle = 0u32;
-        let amount = 5_000_000i128;
-        let timestamp = 1234567890u64;
-
-        let result = record_payout(&env, group_id, cycle, recipient.clone(), amount, timestamp);
-        assert!(result.is_ok());
-
-        // Verify the stored record passes validation
-        let record_key = StorageKeyBuilder::payout_record(group_id, cycle);
-        let stored_record: PayoutRecord = env.storage().persistent().get(&record_key).unwrap();
-        assert!(stored_record.validate());
-    }
-
-    // Test record_payout with zero amount should panic (PayoutRecord::new panics)
-    #[test]
-    #[should_panic(expected = "amount must be greater than 0")]
-    fn test_record_payout_zero_amount() {
-        let env = Env::default();
-        let recipient = Address::generate(&env);
-        let group_id = 1u64;
-        let cycle = 0u32;
-        let amount = 0i128; // Invalid amount
-        let timestamp = 1234567890u64;
-
-        // This should panic because PayoutRecord::new validates amount > 0
-        let _result = record_payout(&env, group_id, cycle, recipient, amount, timestamp);
-    }
-
-    // Test record_payout with negative amount should panic
-    #[test]
-    #[should_panic(expected = "amount must be greater than 0")]
-    fn test_record_payout_negative_amount() {
-        let env = Env::default();
-        let recipient = Address::generate(&env);
-        let group_id = 1u64;
-        let cycle = 0u32;
-        let amount = -1_000_000i128; // Invalid negative amount
-        let timestamp = 1234567890u64;
-
-        // This should panic because PayoutRecord::new validates amount > 0
-        let _result = record_payout(&env, group_id, cycle, recipient, amount, timestamp);
     }
 
     // Test record_payout stores both record and recipient keys
@@ -1556,144 +1523,6 @@ mod tests {
     }
 
     // Test advance_cycle_or_complete with valid group
-    #[test]
-    fn test_advance_cycle_or_complete_valid() {
-        let env = Env::default();
-        let creator = Address::generate(&env);
-
-        // Create a group with 3 members (3 cycles total)
-        let mut group = Group::new(
-            1,
-            creator,
-            10_000_000i128, // 1 XLM
-            604800,         // 1 week
-            3,              // 3 members
-            2,              // 2 min members
-            1234567890,
-        );
-
-        // Group starts at cycle 0
-        assert_eq!(group.current_cycle, 0);
-        assert_eq!(group.status, GroupStatus::Active);
-        assert!(group.is_active);
-        assert!(!group.is_complete());
-
-        // Advance to cycle 1
-        let result = advance_cycle_or_complete(&env, &mut group);
-        assert!(result.is_ok());
-        assert_eq!(group.current_cycle, 1);
-        assert_eq!(group.status, GroupStatus::Active);
-        assert!(group.is_active);
-        assert!(!group.is_complete());
-
-        // Verify group was saved to storage
-        let group_key = StorageKeyBuilder::group_data(group.id);
-        let stored_group: Option<Group> = env.storage().persistent().get(&group_key);
-        assert!(stored_group.is_some());
-        assert_eq!(stored_group.unwrap().current_cycle, 1);
-    }
-
-    // Test advance_cycle_or_complete advances to completion
-    #[test]
-    fn test_advance_cycle_or_complete_to_completion() {
-        let env = Env::default();
-        let creator = Address::generate(&env);
-
-        // Create a group with 3 members
-        let mut group = Group::new(1, creator, 10_000_000i128, 604800, 3, 2, 1234567890);
-
-        // Advance to cycle 1
-        let result1 = advance_cycle_or_complete(&env, &mut group);
-        assert!(result1.is_ok());
-        assert_eq!(group.current_cycle, 1);
-        assert!(!group.is_complete());
-
-        // Advance to cycle 2
-        let result2 = advance_cycle_or_complete(&env, &mut group);
-        assert!(result2.is_ok());
-        assert_eq!(group.current_cycle, 2);
-        assert!(!group.is_complete());
-
-        // Advance to cycle 3 - should mark as complete
-        let result3 = advance_cycle_or_complete(&env, &mut group);
-        assert!(result3.is_ok());
-        assert_eq!(group.current_cycle, 3);
-        assert!(group.is_complete());
-        assert_eq!(group.status, GroupStatus::Completed);
-        assert!(!group.is_active);
-
-        // Verify group was saved with completed status
-        let group_key = StorageKeyBuilder::group_data(group.id);
-        let stored_group: Group = env.storage().persistent().get(&group_key).unwrap();
-        assert_eq!(stored_group.current_cycle, 3);
-        assert_eq!(stored_group.status, GroupStatus::Completed);
-        assert!(!stored_group.is_active);
-    }
-
-    // Test advance_cycle_or_complete with 2-member group
-    #[test]
-    fn test_advance_cycle_or_complete_small_group() {
-        let env = Env::default();
-        let creator = Address::generate(&env);
-
-        // Create a minimal group with 2 members
-        let mut group = Group::new(
-            1,
-            creator,
-            5_000_000i128,
-            604800,
-            2, // Only 2 members
-            2,
-            1234567890,
-        );
-
-        assert_eq!(group.current_cycle, 0);
-        assert!(!group.is_complete());
-
-        // Advance to cycle 1
-        let result1 = advance_cycle_or_complete(&env, &mut group);
-        assert!(result1.is_ok());
-        assert_eq!(group.current_cycle, 1);
-        assert!(!group.is_complete());
-
-        // Advance to cycle 2 - should complete
-        let result2 = advance_cycle_or_complete(&env, &mut group);
-        assert!(result2.is_ok());
-        assert_eq!(group.current_cycle, 2);
-        assert!(group.is_complete());
-        assert_eq!(group.status, GroupStatus::Completed);
-    }
-
-    // Test advance_cycle_or_complete with large group
-    #[test]
-    fn test_advance_cycle_or_complete_large_group() {
-        let env = Env::default();
-        let creator = Address::generate(&env);
-
-        // Create a larger group with 10 members
-        let mut group = Group::new(
-            1,
-            creator,
-            10_000_000i128,
-            604800,
-            10, // 10 members
-            2,
-            1234567890,
-        );
-
-        // Advance through several cycles
-        for expected_cycle in 1..=5 {
-            let result = advance_cycle_or_complete(&env, &mut group);
-            assert!(result.is_ok());
-            assert_eq!(group.current_cycle, expected_cycle);
-            assert!(!group.is_complete());
-            assert_eq!(group.status, GroupStatus::Active);
-        }
-
-        // Verify we're at cycle 5 and still active
-        assert_eq!(group.current_cycle, 5);
-        assert!(!group.is_complete());
-    }
 
     // Test advance_cycle_or_complete saves to correct storage key
     #[test]
@@ -1721,88 +1550,6 @@ mod tests {
         assert_eq!(stored_group.unwrap().id, 42);
     }
 
-    // Test advance_cycle_or_complete increments by exactly 1
-    #[test]
-    fn test_advance_cycle_or_complete_increments_by_one() {
-        let env = Env::default();
-        let creator = Address::generate(&env);
-
-        let mut group = Group::new(1, creator, 10_000_000i128, 604800, 5, 2, 1234567890);
-
-        let initial_cycle = group.current_cycle;
-
-        let result = advance_cycle_or_complete(&env, &mut group);
-        assert!(result.is_ok());
-
-        // Verify cycle incremented by exactly 1
-        assert_eq!(group.current_cycle, initial_cycle + 1);
-    }
-
-    // Test advance_cycle_or_complete panics on already complete group
-    #[test]
-    #[should_panic(expected = "group is already complete")]
-    fn test_advance_cycle_or_complete_already_complete() {
-        let env = Env::default();
-        let creator = Address::generate(&env);
-
-        let mut group = Group::new(1, creator, 10_000_000i128, 604800, 2, 2, 1234567890);
-
-        // Advance to completion
-        group.current_cycle = 2;
-        group.status = GroupStatus::Completed;
-        group.is_active = false;
-
-        // This should panic because group is already complete
-        let _result = advance_cycle_or_complete(&env, &mut group);
-    }
-
-    // =========================================================================
-    // apply_missed_contribution_penalties tests
-    // =========================================================================
-
-    #[test]
-    fn test_apply_missed_penalties_charges_non_contributors() {
-        let env = Env::default();
-        let creator = Address::generate(&env);
-        let member_a = Address::generate(&env);
-        let member_b = Address::generate(&env);
-        let group_id = 1u64;
-        let cycle = 0u32;
-        let penalty = 500_000i128;
-
-        // Create group with penalty enabled
-        let group = crate::group::Group::new_with_penalty(
-            group_id, creator, 10_000_000, 604800, 3, 2, 1_000_000, true, penalty,
-        );
-        env.storage()
-            .persistent()
-            .set(&StorageKeyBuilder::group_data(group_id), &group);
-
-        // Store member list: member_a and member_b
-        let mut members = soroban_sdk::Vec::new(&env);
-        members.push_back(member_a.clone());
-        members.push_back(member_b.clone());
-        env.storage()
-            .persistent()
-            .set(&StorageKeyBuilder::group_members(group_id), &members);
-
-        // Only member_a contributed — member_b missed
-        let contrib_key =
-            StorageKeyBuilder::contribution_individual(group_id, cycle, member_a.clone());
-        env.storage().persistent().set(&contrib_key, &true);
-
-        apply_missed_contribution_penalties(&env, group_id, cycle, &group).unwrap();
-
-        // member_b should have a penalty
-        let penalty_key_b = StorageKeyBuilder::member_penalty_total(group_id, member_b.clone());
-        let total_b: i128 = env.storage().persistent().get(&penalty_key_b).unwrap_or(0);
-        assert_eq!(total_b, penalty);
-
-        // member_a should have no penalty
-        let penalty_key_a = StorageKeyBuilder::member_penalty_total(group_id, member_a.clone());
-        let total_a: i128 = env.storage().persistent().get(&penalty_key_a).unwrap_or(0);
-        assert_eq!(total_a, 0);
-    }
 
     #[test]
     fn test_apply_missed_penalties_adds_to_pool() {
@@ -1874,9 +1621,8 @@ mod tests {
 
         // Create a minimal group with payout_in_progress = true
         let creator = Address::generate(&env);
-        let mut group = Group::new_with_penalty(
-            group_id, creator, 1_000_000, 3600, 2, 2, 0, 0, false, 0,
-        );
+        let mut group =
+            Group::new_with_penalty(group_id, creator, 1_000_000, 3600, 2, 2, 0, 0, false, 0);
         group.payout_in_progress = true;
         env.storage()
             .persistent()

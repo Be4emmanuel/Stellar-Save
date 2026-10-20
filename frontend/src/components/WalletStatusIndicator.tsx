@@ -1,21 +1,14 @@
-import { useState, useEffect } from 'react';
-import {
-  Box,
-  Typography,
-  Chip,
-  IconButton,
-  Tooltip,
-  Stack,
-  CircularProgress,
-} from '@mui/material';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ErrorIcon from '@mui/icons-material/Error';
+import InfoIcon from '@mui/icons-material/Info';
 import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
-import InfoIcon from '@mui/icons-material/Info';
-import { useWallet } from '../hooks/useWallet';
+import { Box, Typography, Chip, IconButton, Tooltip, Stack, CircularProgress } from '@mui/material';
+import { useState, useEffect } from 'react';
+
 import { useClipboard } from '../hooks/useClipboard';
+import { useWallet } from '../hooks/useWallet';
 
 /**
  * WalletStatusIndicator — Persistent wallet connection status display
@@ -39,7 +32,9 @@ export function WalletStatusIndicator() {
       try {
         const start = Date.now();
         // Simple ping to Stellar network endpoint
-        const response = await fetch(`https://horizon${network === 'mainnet' ? '' : '-testnet'}.stellar.org/`);
+        const response = await fetch(
+          `https://horizon${network === 'mainnet' ? '' : '-testnet'}.stellar.org/`
+        );
         const end = Date.now();
         if (response.ok) {
           setLatency(end - start);
@@ -59,7 +54,9 @@ export function WalletStatusIndicator() {
     return () => clearInterval(interval);
   }, [status, network]);
 
-  const getConnectionStrength = (latencyMs: number | null): 'excellent' | 'good' | 'poor' | 'offline' => {
+  const getConnectionStrength = (
+    latencyMs: number | null
+  ): 'excellent' | 'good' | 'poor' | 'offline' => {
     if (latencyMs === null) return 'offline';
     if (latencyMs < 200) return 'excellent';
     if (latencyMs < 500) return 'good';
@@ -68,19 +65,27 @@ export function WalletStatusIndicator() {
 
   const getStrengthColor = (strength: string) => {
     switch (strength) {
-      case 'excellent': return '#22c55e';
-      case 'good': return '#f59e0b';
-      case 'poor': return '#ef4444';
-      default: return '#9ca3af';
+      case 'excellent':
+        return '#22c55e';
+      case 'good':
+        return '#f59e0b';
+      case 'poor':
+        return '#ef4444';
+      default:
+        return '#9ca3af';
     }
   };
 
   const getStrengthLabel = (strength: string) => {
     switch (strength) {
-      case 'excellent': return 'Excellent (<200ms)';
-      case 'good': return 'Good (200-500ms)';
-      case 'poor': return 'Poor (>500ms)';
-      default: return 'Offline';
+      case 'excellent':
+        return 'Excellent (<200ms)';
+      case 'good':
+        return 'Good (200-500ms)';
+      case 'poor':
+        return 'Poor (>500ms)';
+      default:
+        return 'Offline';
     }
   };
 
@@ -133,17 +138,12 @@ export function WalletStatusIndicator() {
       {/* Status row */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <CheckCircleIcon sx={{ color: '#22c55e', fontSize: 18 }} />
-        <Chip
-          label={network || 'unknown'}
-          size="small"
-          variant="outlined"
-          color="success"
-        />
+        <Chip label={network || 'unknown'} size="small" variant="outlined" color="success" />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {isMeasuringLatency ? (
-            <CircularProgress size={14} />
+            <CircularProgress size={14} aria-label="Measuring connection latency" />
           ) : (
-            <WifiIcon sx={{ color: strengthColor, fontSize: 16 }} />
+            <WifiIcon sx={{ color: strengthColor, fontSize: 16 }} aria-hidden="true" />
           )}
           <Tooltip title={getStrengthLabel(strength)}>
             <Typography variant="caption" sx={{ color: strengthColor, cursor: 'help' }}>
@@ -163,6 +163,7 @@ export function WalletStatusIndicator() {
             <IconButton
               size="small"
               onClick={() => copy(activeAddress)}
+              aria-label={copied ? 'Address copied' : 'Copy wallet address'}
               sx={{ p: 0.5 }}
             >
               {copied ? (

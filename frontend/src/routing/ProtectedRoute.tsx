@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useWallet } from '../hooks/useWallet';
+
 import { ROUTES } from './constants';
+import { useWallet } from '../hooks/useWallet';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -30,4 +31,3 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   return <>{children}</>;
 }
-

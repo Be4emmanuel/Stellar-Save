@@ -1,28 +1,34 @@
 import { Router } from 'express';
 import { format as fastCsvFormat } from 'fast-csv';
 
-import { RecommendationEngine } from '../recommendation';
-import { EmailService } from '../email_service';
-import { ExportService } from '../export_service';
-import { parseOffsetParams, parseCursorParams, paginate, paginateArray, paginateCursorArray } from '../lib/pagination';
-import { BackupService, S3HttpClient } from '../backup_service';
-import { BackupScheduler } from '../backup_scheduler';
-import { RecoveryService } from '../recovery_service';
-import { BackupMonitor } from '../backup_monitor';
-import { BackupRestoreDrill } from '../backup_restore_drill';
-import { ContractEventIndexer } from '../contract_event_indexer';
-import { AnalyticsService } from '../analytics_service';
-import { FeedbackService } from '../feedback_service';
+import { AdminService } from '../admin_service';
 import { createAnalyticsMiddlewareStack, createAnalyticsCacheMiddleware } from '../analytics_middleware';
-import { Group, UserInteraction, UserPreference } from '../models';
+import { apiKeyAuthMiddleware, recordApiUsage } from '../api_key_rate_limiter';
+import { apiKeyService } from '../api_key_service';
+import { adminAuthMiddleware } from '../modules/auth/auth_middleware';
+import { toContractEventDTO } from '../dto';
+import { createGovernanceRouter } from './governance';
+import { createInsuranceRouter } from './insurance';
 import { createNotificationRouter } from './notifications';
 import { createSseRouter } from './sse';
-import { createInsuranceRouter } from './insurance';
-import { createGovernanceRouter } from './governance';
-import { adminAuthMiddleware } from '../auth_middleware';
-import { apiKeyService } from '../api_key_service';
-import { apiKeyAuthMiddleware, recordApiUsage } from '../api_key_rate_limiter';
-import { AdminService } from '../admin_service';
+import { AppError } from '../lib/errors';
+import { parseOffsetParams, paginate, paginateArray } from '../lib/pagination';
+import { validateBody, validateQuery, validateParams, schemas } from '../lib/validation';
+import { readinessCheckCache } from '../redis';
+import { logger } from '../logger';
+
+import type { AnalyticsService } from '../analytics_service';
+import type { BackupMonitor } from '../backup_monitor';
+import type { BackupRestoreDrill } from '../backup_restore_drill';
+import type { BackupScheduler } from '../backup_scheduler';
+import type { BackupService} from '../backup_service';
+import type { ContractEventIndexer } from '../contract_event_indexer';
+import type { ExportService } from '../export_service';
+import type { FeedbackService } from '../feedback_service';
+import type { UserPreference } from '../models';
+import type { RecommendationEngine } from '../recommendation';
+import type { RecoveryService } from '../recovery_service';
+import type { NextFunction } from 'express';
 
 // ── Shared service instances (passed in from app) ────────────────────────────
 export interface V1Services {
@@ -50,7 +56,6 @@ export function createV1Router(services: V1Services): Router {
     backupRestoreDrill,
     eventIndexer,
     analyticsService,
-    feedbackService,
   } = services;
 
   // Setup analytics middleware
@@ -65,13 +70,16 @@ export function createV1Router(services: V1Services): Router {
     '/stats/groups',
     analyticsMiddleware.readRateLimit,
     statsGroupsCache,
-    async (_req, res) => {
+    validateQuery(schemas.analyticsDateQuery),
+    async (req: any, res, next) => {
       try {
+        const { date } = req.validatedQuery || {};
+        const targetDate = date ? new Date(date) : new Date();
         const stats = await analyticsService.getGroupsOverviewStats();
         res.json(stats);
       } catch (error) {
-        console.error('Error fetching groups overview stats:', error);
-        res.status(500).json({ error: 'Failed to fetch group statistics' });
+        logger.error('Error fetching groups overview stats', { error: String(error) });
+        next(new AppError('STATS_FETCH_FAILED', 'Failed to fetch group statistics', 500));
       }
     }
   );
@@ -89,56 +97,57 @@ export function createV1Router(services: V1Services): Router {
   router.use('/governance', createGovernanceRouter());
 
   // Search
-  router.get('/search', async (req, res) => {
-    const { q } = req.query;
-    if (!q) return res.status(400).json({ error: 'Query parameter q is required' });
+  router.get('/search', validateQuery(schemas.searchQuery), async (req: any, res, next) => {
+    const { q } = req.validatedQuery;
     try {
       const { SearchService } = await import('../search');
       const searchService = new SearchService();
-      res.json(await searchService.globalSearch(q as string));
-    } catch {
-      res.status(500).json({ error: 'Search failed' });
+      res.json(await searchService.globalSearch(q));
+    } catch (error) {
+      logger.error('Search failed', { error: String(error) });
+      next(new AppError('SEARCH_FAILED', 'Search failed', 500));
     }
   });
 
-  router.get('/search/autocomplete', async (req, res) => {
-    const { q } = req.query;
-    if (!q) return res.status(400).json({ error: 'Query parameter q is required' });
+  router.get('/search/autocomplete', validateQuery(schemas.searchQuery), async (req: any, res, next) => {
+    const { q } = req.validatedQuery;
     try {
       const { SearchService } = await import('../search');
       const searchService = new SearchService();
-      res.json(await searchService.autocomplete(q as string));
-    } catch {
-      res.status(500).json({ error: 'Autocomplete failed' });
+      res.json(await searchService.autocomplete(q));
+    } catch (error) {
+      logger.error('Autocomplete failed', { error: String(error) });
+      next(new AppError('SEARCH_FAILED', 'Autocomplete failed', 500));
     }
   });
 
   // Preferences
-  router.post('/preferences', (req, res) => {
-    const pref: UserPreference = req.body;
-    if (!pref.userId) return res.status(400).json({ error: 'userId is required' });
-    engine.setPreference(pref);
-    res.status(200).json({ message: 'Preferences updated' });
-  });
+  router.post(
+    '/preferences',
+    validateBody(schemas.userPreferenceUpdate),
+    (req, res, next) => {
+      const pref = req.body;
+      engine.setPreference(pref);
+      res.status(200).json({ message: 'Preferences updated' });
+    }
+  );
 
   // Recommendations
-  router.get('/recommendations/:userId', (req, res) => {
-    const { userId } = req.params;
-    const recommendations = engine.getRecommendations(userId, 'collaborative');
-    res.json({ userId, algorithm: 'collaborative', recommendations });
-  });
+  router.get(
+    '/recommendations/:userId',
+    validateParams(schemas.userIdParam),
+    (req, res) => {
+      const { userId } = req.params;
+      const recommendations = engine.getRecommendations(userId, 'collaborative');
+      res.json({ userId, algorithm: 'collaborative', recommendations });
+    }
+  );
 
   // Health
   router.get('/health', (req, res) => {
-    const responseTimeMs = Date.now() - (req as any).__startTimeMs;
     res.json({
       status: 'ok',
       version: 'v1',
-      responseTimeMs,
-      dependencies: {
-        database: { up: true },
-        horizon: { up: true },
-      },
     });
   });
 
@@ -146,13 +155,14 @@ export function createV1Router(services: V1Services): Router {
   router.get('/ready', async (req, res) => {
     const requestStart = Date.now();
 
-    const [database, horizon] = await Promise.all([
+    const [database, horizon, cache] = await Promise.all([
       eventIndexer.readinessCheckDatabase(),
       eventIndexer.readinessCheckHorizon(),
+      readinessCheckCache(),
     ]);
 
     const responseTimeMs = Date.now() - requestStart;
-    const up = database.up && horizon.up;
+    const up = database.up && horizon.up && cache.up;
 
     res.status(up ? 200 : 503).json({
       status: up ? 'ready' : 'not_ready',
@@ -161,138 +171,180 @@ export function createV1Router(services: V1Services): Router {
       dependencies: {
         database,
         horizon,
+        cache,
       },
     });
   });
 
   // Export
-  router.post('/export', async (req, res) => {
-    const { userId, email, format } = req.body;
-    if (!userId || !email || !format)
-      return res.status(400).json({ error: 'userId, email, and format are required' });
-    if (format !== 'CSV' && format !== 'JSON')
-      return res.status(400).json({ error: 'Invalid format. Use CSV or JSON' });
-    const jobId = await exportService.createJob(userId, email, format);
-    res.status(202).json({ jobId, message: 'Export job created' });
+  router.post('/export', validateBody(schemas.exportJob), async (req, res, next) => {
+    try {
+      const { userId, email, format } = req.body;
+      const jobId = await exportService.createJob(userId, email, format);
+      res.status(202).json({ jobId, message: 'Export job created' });
+    } catch (error) {
+      logger.error('Export job creation failed', { error: String(error) });
+      next(new AppError('EXPORT_FAILED', 'Failed to create export job', 500));
+    }
   });
 
-  router.get('/export/:jobId', (req, res) => {
-    const job = exportService.getJob(req.params.jobId);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-    res.json(job);
-  });
+  router.get(
+    '/export/:jobId',
+    validateParams(schemas.jobIdParam),
+    (req, res, next) => {
+      const { jobId } = req.params;
+      const job = exportService.getJob(jobId);
+      if (!job) return next(new AppError('NOT_FOUND', 'Job not found', 404));
+      res.json(job);
+    }
+  );
 
-  router.get('/export/:jobId/download', (req, res) => {
-    const job = exportService.getJob(req.params.jobId);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-    if (job.status !== 'completed')
-      return res.status(400).json({ error: 'Job is not completed yet' });
-    res.json({ url: job.fileUrl });
-  });
+  router.get(
+    '/export/:jobId/download',
+    validateParams(schemas.jobIdParam),
+    (req, res, next) => {
+      const { jobId } = req.params;
+      const job = exportService.getJob(jobId);
+      if (!job) return next(new AppError('NOT_FOUND', 'Job not found', 404));
+      if (job.status !== 'completed')
+        return next(new AppError('JOB_NOT_COMPLETE', 'Job is not completed yet', 400));
+      res.json({ url: job.fileUrl });
+    }
+  );
 
   // Backup
-  router.post('/backup', async (req, res) => {
-    const { type } = req.body;
-    if (type !== 'full' && type !== 'incremental')
-      return res.status(400).json({ error: 'type must be "full" or "incremental"' });
-    const job = await backupScheduler.triggerManual(type);
-    res.status(202).json(job);
+  router.post('/backup', validateBody(schemas.backupTrigger), async (req, res, next) => {
+    try {
+      const job = await backupScheduler.triggerManual(req.body.type);
+      res.status(202).json(job);
+    } catch (error) {
+      logger.error('Backup trigger failed', { error: String(error) });
+      next(new AppError('BACKUP_FAILED', 'Failed to trigger backup', 500));
+    }
   });
 
-  router.get('/backup', (_req, res) => res.json(backupService.listJobs()));
+  router.get('/backup', (req, res) => {
+    const pageParams = parseOffsetParams(req.query, { limit: 20 });
+    const allJobs = backupService.listJobs();
+    res.json(paginateArray(allJobs, pageParams));
+  });
 
   router.get('/backup/alerts', (req, res) => {
     const unacknowledgedOnly = req.query.unacknowledgedOnly === 'true';
-    res.json(backupMonitor.getAlerts(unacknowledgedOnly));
+    const pageParams = parseOffsetParams(req.query, { limit: 20 });
+    const allAlerts = backupMonitor.getAlerts(unacknowledgedOnly);
+    res.json(paginateArray(allAlerts, pageParams));
   });
 
-  router.post('/backup/alerts/:alertId/acknowledge', (req, res) => {
+  router.post('/backup/alerts/:alertId/acknowledge', (req, res, next) => {
     const ok = backupMonitor.acknowledge(req.params.alertId);
-    if (!ok) return res.status(404).json({ error: 'Alert not found' });
+    if (!ok) return next(new AppError('NOT_FOUND', 'Alert not found', 404));
     res.json({ acknowledged: true });
   });
 
-  router.get('/backup/:jobId', (req, res) => {
-    const job = backupService.getJob(req.params.jobId);
-    if (!job) return res.status(404).json({ error: 'Backup job not found' });
-    res.json(job);
-  });
-
-  router.post('/backup/restore', async (req, res) => {
-    try {
-      const result = req.body.jobId
-        ? await recoveryService.restore(req.body.jobId)
-        : await recoveryService.restoreLatest();
-      res.json(result);
-    } catch (err: unknown) {
-      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  router.get(
+    '/backup/:jobId',
+    validateParams(schemas.jobIdParam),
+    (req, res, next) => {
+      const { jobId } = req.params;
+      const job = backupService.getJob(jobId);
+      if (!job) return next(new AppError('NOT_FOUND', 'Backup job not found', 404));
+      res.json(job);
     }
-  });
+  );
 
-  router.get('/backup/drills', (_req, res) => res.json(backupRestoreDrill.listRuns()));
+  router.post(
+    '/backup/restore',
+    validateBody(schemas.backupRestore),
+    async (req, res, next) => {
+      try {
+        const { jobId } = req.body;
+        const result = jobId
+          ? await recoveryService.restore(jobId)
+          : await recoveryService.restoreLatest();
+        res.json(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('Backup restore failed', { error: message });
+        next(new AppError('RESTORE_FAILED', message, 400));
+      }
+    }
+  );
 
-  router.get('/backup/drills/alerts', (req, res) => {
-    const unacknowledgedOnly = req.query.unacknowledgedOnly === 'true';
-    res.json(backupRestoreDrill.listAlerts(unacknowledgedOnly));
-  });
+  router.post(
+    '/backup/alerts/:alertId/acknowledge',
+    validateParams(schemas.alertIdParam),
+    (req, res, next) => {
+      const { alertId } = req.params;
+      const ok = backupMonitor.acknowledge(alertId);
+      if (!ok) return next(new AppError('NOT_FOUND', 'Alert not found', 404));
+      res.json({ acknowledged: true });
+    }
+  );
 
-  router.post('/backup/drills/alerts/:alertId/acknowledge', (req, res) => {
-    const ok = backupRestoreDrill.acknowledge(req.params.alertId);
-    if (!ok) return res.status(404).json({ error: 'Alert not found' });
-    res.json({ acknowledged: true });
-  });
+  router.post(
+    '/backup/drills/alerts/:alertId/acknowledge',
+    validateParams(schemas.alertIdParam),
+    (req, res, next) => {
+      const { alertId } = req.params;
+      const ok = backupRestoreDrill.acknowledge(alertId);
+      if (!ok) return next(new AppError('NOT_FOUND', 'Alert not found', 404));
+      res.json({ acknowledged: true });
+    }
+  );
 
-  router.post('/backup/drills/run', async (_req, res) => {
-    const run = await backupRestoreDrill.runDrill();
-    res.status(202).json(run);
+  router.post('/backup/drills/run', async (_req, res, next) => {
+    try {
+      const run = await backupRestoreDrill.runDrill();
+      res.status(202).json(run);
+    } catch (error) {
+      logger.error('Backup drill failed', { error: String(error) });
+      next(new AppError('DRILL_FAILED', 'Failed to run restore drill', 500));
+    }
   });
 
   // Contract Event Indexer Endpoints
-  router.get('/events', async (req, res) => {
-    try {
-      const { contractId, eventType, startLedger, endLedger, startTime, endTime } =
-        req.query;
+  router.get(
+    '/events',
+    validateQuery(schemas.eventsFilterQuery),
+    async (req: any, res, next) => {
+      try {
+        const { contractId, eventType, startLedger, endLedger, startTime, endTime, limit, offset } =
+          req.validatedQuery;
+        const options: any = {};
+        if (contractId) options.contractId = contractId;
+        if (eventType) options.eventType = eventType;
+        if (startLedger !== undefined) options.startLedger = startLedger;
+        if (endLedger !== undefined) options.endLedger = endLedger;
+        if (startTime) options.startTime = new Date(startTime);
+        if (endTime) options.endTime = new Date(endTime);
+        options.limit = limit;
+        options.offset = offset;
 
-      const pageParams = parseOffsetParams(req.query);
-
-      const options: any = {};
-      if (contractId) options.contractId = contractId as string;
-      if (eventType) options.eventType = eventType as string;
-      if (startLedger) options.startLedger = parseInt(startLedger as string);
-      if (endLedger) options.endLedger = parseInt(endLedger as string);
-      if (startTime) options.startTime = new Date(startTime as string);
-      if (endTime) options.endTime = new Date(endTime as string);
-      options.limit = pageParams.limit;
-      options.offset = pageParams.offset;
-
-      const result = await eventIndexer.getEvents(options);
-
-      // result may be an array or an object — normalise to PaginatedResult
-      const items: any[] = Array.isArray(result) ? result : (result as any).events ?? [];
-      const total: number = Array.isArray(result)
-        ? items.length
-        : (result as any).total ?? items.length;
-      res.json(paginate(items, total, pageParams));
-    } catch (error) {
-      console.error('Error fetching events:', error);
-      res.status(500).json({ error: 'Failed to fetch events' });
+        const result = await eventIndexer.getEvents(options);
+        const items: any[] = Array.isArray(result) ? result : ((result as any).events ?? []);
+        const total: number = Array.isArray(result)
+          ? items.length
+          : ((result as any).total ?? items.length);
+        res.json(paginate(items.map(toContractEventDTO), total, { limit, offset }));
+      } catch (error) {
+        logger.error('Error fetching events', { error: String(error) });
+        next(new AppError('EVENTS_FETCH_FAILED', 'Failed to fetch events', 500));
+      }
     }
-  });
+  );
 
-  router.get('/events/stats', async (req, res) => {
+  router.get('/events/stats', async (req, res, next) => {
     try {
       const { contractId } = req.query;
-      // Get basic stats about events
       const totalEvents = await (eventIndexer as any).prisma.contractEvent.count({
         where: contractId ? { contractId: contractId as string } : {},
       });
-
       const eventTypes = await (eventIndexer as any).prisma.contractEvent.groupBy({
         by: ['eventType'],
         where: contractId ? { contractId: contractId as string } : {},
         _count: { eventType: true },
       });
-
       res.json({
         totalEvents,
         eventTypeBreakdown: eventTypes.map((type: any) => ({
@@ -301,460 +353,449 @@ export function createV1Router(services: V1Services): Router {
         })),
       });
     } catch (error) {
-      console.error('Error fetching event stats:', error);
-      res.status(500).json({ error: 'Failed to fetch event stats' });
+      logger.error('Error fetching event stats', { error: String(error) });
+      next(new AppError('EVENT_STATS_FAILED', 'Failed to fetch event stats', 500));
     }
   });
 
   // ── Analytics Endpoints (Issue #558) ────────────────────────────
 
-  // Get platform statistics for a specific date
   router.get(
     '/analytics/platform',
     analyticsMiddleware.readRateLimit,
     analyticsMiddleware.cache,
-    async (req, res) => {
+    validateQuery(schemas.analyticsDateQuery),
+    async (req: any, res, next) => {
       try {
-        const { date } = req.query;
-        const targetDate = date ? new Date(date as string) : new Date();
+        const { date } = req.validatedQuery || {};
+        const targetDate = date ? new Date(date) : new Date();
         const stats = await analyticsService.getPlatformStats(targetDate);
-
-        if (!stats) {
-          return res.status(404).json({ error: 'No analytics data available for this date' });
-        }
-
+        if (!stats)
+          return next(new AppError('NOT_FOUND', 'No analytics data available for this date', 404));
         res.json(stats);
       } catch (error) {
-        console.error('Error fetching platform stats:', error);
-        res.status(500).json({ error: 'Failed to fetch platform statistics' });
+        logger.error('Error fetching platform stats', { error: String(error) });
+        next(new AppError('ANALYTICS_FETCH_FAILED', 'Failed to fetch platform statistics', 500));
       }
     }
   );
 
-  // Get platform trends over a date range
   router.get(
     '/analytics/platform/trends',
     analyticsMiddleware.readRateLimit,
     analyticsMiddleware.cache,
-    async (req, res) => {
+    async (req, res, next) => {
       try {
         const { startDate, endDate } = req.query;
-
-        if (!startDate || !endDate) {
-          return res.status(400).json({ error: 'startDate and endDate are required' });
-        }
-
+        if (!startDate || !endDate)
+          return next(new AppError('VALIDATION_ERROR', 'startDate and endDate are required', 400));
         const pageParams = parseOffsetParams(req.query, { limit: 30 });
-
         const trends = await analyticsService.getPlatformTrends(
           new Date(startDate as string),
           new Date(endDate as string),
           pageParams
         );
-
-        res.json({
-          startDate,
-          endDate,
-          ...paginate(trends, trends.length, pageParams),
-        });
+        res.json({ startDate, endDate, ...paginate(trends, trends.length, pageParams) });
       } catch (error) {
-        console.error('Error fetching platform trends:', error);
-        res.status(500).json({ error: 'Failed to fetch platform trends' });
+        logger.error('Error fetching platform trends', { error: String(error) });
+        next(new AppError('ANALYTICS_FETCH_FAILED', 'Failed to fetch platform trends', 500));
       }
     }
   );
 
-  // Get user-specific analytics
   router.get(
     '/analytics/users/:userId',
     analyticsMiddleware.readRateLimit,
     analyticsMiddleware.cache,
-    async (req, res) => {
+    validateParams(schemas.userIdParam),
+    validateQuery(schemas.analyticsDateQuery),
+    async (req: any, res, next) => {
       try {
         const { userId } = req.params;
-        const { date } = req.query;
-        const targetDate = date ? new Date(date as string) : new Date();
-
+        const { date } = req.validatedQuery || {};
+        const targetDate = date ? new Date(date) : new Date();
         const stats = await analyticsService.getUserStats(userId, targetDate);
-
-        if (!stats) {
-          return res.status(404).json({ error: 'No analytics data available for this user' });
-        }
-
+        if (!stats)
+          return next(new AppError('NOT_FOUND', 'No analytics data available for this user', 404));
         res.json(stats);
       } catch (error) {
-        console.error('Error fetching user stats:', error);
-        res.status(500).json({ error: 'Failed to fetch user statistics' });
+        logger.error('Error fetching user stats', { error: String(error) });
+        next(new AppError('ANALYTICS_FETCH_FAILED', 'Failed to fetch user statistics', 500));
       }
     }
   );
 
-  // Get group-specific analytics
   router.get(
     '/analytics/groups/:groupId',
     analyticsMiddleware.readRateLimit,
     analyticsMiddleware.cache,
-    async (req, res) => {
+    validateParams(schemas.groupIdParam),
+    validateQuery(schemas.analyticsDateQuery),
+    async (req: any, res, next) => {
       try {
         const { groupId } = req.params;
-        const { date } = req.query;
-        const targetDate = date ? new Date(date as string) : new Date();
-
+        const { date } = req.validatedQuery || {};
+        const targetDate = date ? new Date(date) : new Date();
         const stats = await analyticsService.getGroupStats(groupId, targetDate);
-
-        if (!stats) {
-          return res.status(404).json({ error: 'No analytics data available for this group' });
-        }
-
+        if (!stats)
+          return next(new AppError('NOT_FOUND', 'No analytics data available for this group', 404));
         res.json(stats);
       } catch (error) {
-        console.error('Error fetching group stats:', error);
-        res.status(500).json({ error: 'Failed to fetch group statistics' });
+        logger.error('Error fetching group stats', { error: String(error) });
+        next(new AppError('ANALYTICS_FETCH_FAILED', 'Failed to fetch group statistics', 500));
       }
     }
   );
 
-  // Get analytics events statistics
   router.get(
     '/analytics/events',
     analyticsMiddleware.readRateLimit,
     analyticsMiddleware.cache,
-    async (req, res) => {
+    validateQuery(schemas.paginationWithDateRange),
+    async (req: any, res, next) => {
       try {
-        const { startDate, endDate } = req.query;
-        const pageParams = parseOffsetParams(req.query, { limit: 20 });
-
+        const { startDate, endDate, limit, offset } = req.validatedQuery;
         const eventStats = await analyticsService.getEventStats({
-          startDate: startDate ? new Date(startDate as string) : undefined,
-          endDate: endDate ? new Date(endDate as string) : undefined,
-          ...pageParams,
+          startDate: startDate ? new Date(startDate) : undefined,
+          endDate: endDate ? new Date(endDate) : undefined,
+          limit,
+          offset,
         });
-
-        res.json(paginate(eventStats, eventStats.length, pageParams));
+        res.json(paginate(eventStats, eventStats.length, { limit, offset }));
       } catch (error) {
-        console.error('Error fetching event stats:', error);
-        res.status(500).json({ error: 'Failed to fetch event statistics' });
+        logger.error('Error fetching event stats', { error: String(error) });
+        next(new AppError('ANALYTICS_FETCH_FAILED', 'Failed to fetch event statistics', 500));
       }
     }
   );
 
   // Record an analytics event
-  router.post('/analytics/events', analyticsMiddleware.writeRateLimit, async (req, res) => {
-    try {
-      const { eventType, eventName, userId, groupId, eventData, sessionId } = req.body;
-
-      if (!eventType || !eventName) {
-        return res.status(400).json({
-          error: 'eventType and eventName are required',
-        });
+  router.post(
+    '/analytics/events',
+    analyticsMiddleware.writeRateLimit,
+    validateBody(schemas.analyticsEventBody),
+    async (req, res, next) => {
+      try {
+        const { eventType, eventName, userId, groupId, eventData, sessionId } = req.body;
+        await analyticsService.recordEvent(
+          eventType,
+          eventName,
+          userId,
+          groupId,
+          eventData,
+          sessionId
+        );
+        res.status(201).json({ message: 'Event recorded successfully' });
+      } catch (error) {
+        logger.error('Error recording event', { error: String(error) });
+        next(new AppError('ANALYTICS_RECORD_FAILED', 'Failed to record event', 500));
       }
-
-      await analyticsService.recordEvent(
-        eventType,
-        eventName,
-        userId,
-        groupId,
-        eventData,
-        sessionId
-      );
-
-      res.status(201).json({ message: 'Event recorded successfully' });
-    } catch (error) {
-      console.error('Error recording event:', error);
-      res.status(500).json({ error: 'Failed to record event' });
     }
-  });
+  );
 
   // Generate an analytics report
-  router.post('/analytics/reports', analyticsMiddleware.writeRateLimit, async (req, res) => {
-    try {
-      const { reportType, reportName, startDate, endDate, generatedBy } = req.body;
-
-      if (!reportType || !reportName || !startDate || !endDate) {
-        return res.status(400).json({
-          error: 'reportType, reportName, startDate, and endDate are required',
-        });
+  router.post(
+    '/analytics/reports',
+    analyticsMiddleware.writeRateLimit,
+    validateBody(schemas.analyticsReport),
+    async (req, res, next) => {
+      try {
+        const { reportType, reportName, startDate, endDate, generatedBy } = req.body;
+        const report = await analyticsService.generateReport(
+          reportType,
+          reportName,
+          new Date(startDate),
+          new Date(endDate),
+          generatedBy
+        );
+        res.status(201).json(report);
+      } catch (error) {
+        logger.error('Error generating report', { error: String(error) });
+        next(new AppError('REPORT_GENERATION_FAILED', 'Failed to generate report', 500));
       }
-
-      const report = await analyticsService.generateReport(
-        reportType,
-        reportName,
-        new Date(startDate),
-        new Date(endDate),
-        generatedBy
-      );
-
-      res.status(201).json(report);
-    } catch (error) {
-      console.error('Error generating report:', error);
-      res.status(500).json({ error: 'Failed to generate report' });
     }
-  });
+  );
 
   // Get analytics reports
   router.get(
     '/analytics/reports',
     analyticsMiddleware.readRateLimit,
     analyticsMiddleware.cache,
-    async (req, res) => {
+    validateQuery(schemas.paginationQuery),
+    async (req: any, res, next) => {
       try {
         const { reportType } = req.query;
-        const pageParams = parseOffsetParams(req.query, { limit: 20 });
-
-        const reports = await analyticsService.getReports(reportType as string, pageParams);
-
-        res.json(paginate(reports, reports.length, pageParams));
+        const { limit, offset } = req.validatedQuery;
+        const reports = await analyticsService.getReports(reportType as string, {
+          limit,
+          offset,
+        });
+        res.json(paginate(reports, reports.length, { limit, offset }));
       } catch (error) {
-        console.error('Error fetching reports:', error);
-        res.status(500).json({ error: 'Failed to fetch reports' });
+        logger.error('Error fetching reports', { error: String(error) });
+        next(new AppError('ANALYTICS_FETCH_FAILED', 'Failed to fetch reports', 500));
       }
     }
   );
 
   // Get cache statistics
-  router.get('/analytics/cache/stats', analyticsMiddleware.readRateLimit, async (req, res) => {
-    try {
-      const stats = await analyticsService.getCacheStats();
-      res.json(stats);
-    } catch (error) {
-      console.error('Error fetching cache stats:', error);
-      res.status(500).json({ error: 'Failed to fetch cache statistics' });
+  router.get(
+    '/analytics/cache/stats',
+    analyticsMiddleware.readRateLimit,
+    async (req, res, next) => {
+      try {
+        const stats = await analyticsService.getCacheStats();
+        res.json(stats);
+      } catch (error) {
+        logger.error('Error fetching cache stats', { error: String(error) });
+        next(new AppError('ANALYTICS_FETCH_FAILED', 'Failed to fetch cache statistics', 500));
+      }
     }
-  });
+  );
 
   // Clear analytics cache
-  router.post('/analytics/cache/clear', analyticsMiddleware.writeRateLimit, async (req, res) => {
-    try {
-      const { pattern } = req.body;
-      const cachePattern = pattern || '*';
-
-      await analyticsService.clearCache(cachePattern);
-      res.json({ message: 'Cache cleared successfully' });
-    } catch (error) {
-      console.error('Error clearing cache:', error);
-      res.status(500).json({ error: 'Failed to clear cache' });
+  router.post(
+    '/analytics/cache/clear',
+    analyticsMiddleware.writeRateLimit,
+    validateBody(schemas.cachePattern),
+    async (req, res, next) => {
+      try {
+        const { pattern } = req.body;
+        await analyticsService.clearCache(pattern);
+        res.json({ message: 'Cache cleared successfully' });
+      } catch (error) {
+        logger.error('Error clearing cache', { error: String(error) });
+        next(new AppError('CACHE_CLEAR_FAILED', 'Failed to clear cache', 500));
+      }
     }
-  });
+  );
 
   // Members export (CSV streaming) for tax/accounting
   // GET /api/members/:address/export.csv
-  router.get('/members/:address/export.csv', async (req, res) => {
-    const { address } = req.params;
+  router.get(
+    '/members/:address/export.csv',
+    validateParams(schemas.addressParam),
+    async (req, res) => {
+      const { address } = req.params;
 
-    // Delay loading mock data to keep startup fast
-    const { mockTransactions, mockGroups } = await import('../mock_data');
+      // Delay loading mock data to keep startup fast
+      const { mockTransactions } = await import('../mock_data');
 
-    const transactions = mockTransactions
-      .filter((t) => t.memberAddress === address)
-      .sort((a, b) => a.timestamp - b.timestamp);
+      const transactions = mockTransactions
+        .filter((t) => t.memberAddress === address)
+        .sort((a, b) => a.timestamp - b.timestamp);
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${encodeURIComponent(address)}-contributions-payouts.csv"`
-    );
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(address)}-contributions-payouts.csv"`
+      );
 
-    // Stream rows without buffering full dataset in memory.
-    const csvStream = fastCsvFormat({
-      headers: ['date', 'group_id', 'type', 'amount', 'transaction_hash'],
-    });
-
-    csvStream.on('error', (err: any) => {
-      console.error('CSV stream error:', err);
-      if (!res.headersSent) res.status(500).end();
-    });
-
-    csvStream.pipe(res);
-
-    for (const t of transactions) {
-      csvStream.write({
-        date: new Date(t.timestamp).toISOString(),
-        group_id: t.groupId,
-        type: t.type,
-        amount: t.amount,
-        transaction_hash: t.stellarTxHash,
+      // Stream rows without buffering full dataset in memory.
+      const csvStream = fastCsvFormat({
+        headers: ['date', 'group_id', 'type', 'amount', 'transaction_hash'],
       });
-    }
 
-    csvStream.end();
-  });
+      csvStream.on('error', (err: any) => {
+        logger.error('CSV stream error', { error: String(err) });
+        if (!res.headersSent) res.status(500).end();
+      });
+
+      csvStream.pipe(res);
+
+      for (const t of transactions) {
+        csvStream.write({
+          date: new Date(t.timestamp).toISOString(),
+          group_id: t.groupId,
+          type: t.type,
+          amount: t.amount,
+          transaction_hash: t.stellarTxHash,
+        });
+      }
+
+      csvStream.end();
+    }
+  );
 
   // ── Admin Dashboard Endpoints ────────────────────────────────────────────
   const adminService = new AdminService();
 
-  // GET /api/v1/admin/stats — Platform statistics for dashboard
-  router.get('/admin/stats', adminAuthMiddleware, async (_req, res) => {
+  router.get('/admin/stats', adminAuthMiddleware, async (_req, res, next) => {
     try {
       const stats = adminService.getPlatformStats();
       res.json(stats);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch platform stats' });
+      logger.error('Failed to fetch platform stats', { error: String(error) });
+      next(new AppError('ADMIN_FETCH_FAILED', 'Failed to fetch platform stats', 500));
     }
   });
 
-  // GET /api/v1/admin/users — List all users for moderation
-  router.get('/admin/users', adminAuthMiddleware, async (_req, res) => {
+  router.get('/admin/users', adminAuthMiddleware, async (req, res, next) => {
     try {
-      const users = adminService.getUsers();
-      res.json({ users });
+      const pageParams = parseOffsetParams(req.query, { limit: 20 });
+      const allUsers = adminService.getUsers();
+      res.json(paginateArray(allUsers, pageParams));
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch users' });
+      logger.error('Failed to fetch users', { error: String(error) });
+      next(new AppError('ADMIN_FETCH_FAILED', 'Failed to fetch users', 500));
     }
   });
 
-  // PATCH /api/v1/admin/users/:id — Update user (flag/unflag, etc)
-  router.patch('/admin/users/:id', adminAuthMiddleware, async (req: any, res) => {
+  router.patch('/admin/users/:id', adminAuthMiddleware, validateParams(schemas.idParam), validateBody(schemas.adminUserUpdate), async (req: any, res, next) => {
     try {
       const { id } = req.params;
       const { updates, adminId } = req.body;
-      if (!updates) return res.status(400).json({ error: 'updates is required' });
-      if (!adminId) return res.status(400).json({ error: 'adminId is required' });
-
       const updated = adminService.updateUser(id, updates, adminId);
-      if (!updated) return res.status(404).json({ error: 'User not found' });
+      if (!updated) return next(new AppError('NOT_FOUND', 'User not found', 404));
       res.json(updated);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to update user' });
+      logger.error('Failed to update user', { error: String(error) });
+      next(new AppError('ADMIN_UPDATE_FAILED', 'Failed to update user', 500));
     }
   });
 
-  // DELETE /api/v1/admin/users/:id — Delete user
-  router.delete('/admin/users/:id', adminAuthMiddleware, async (req: any, res) => {
+  router.delete('/admin/users/:id', adminAuthMiddleware, validateParams(schemas.idParam), validateBody(schemas.adminUserDelete), async (req: any, res, next) => {
     try {
       const { id } = req.params;
       const { adminId } = req.body;
-      if (!adminId) return res.status(400).json({ error: 'adminId is required' });
-
       const deleted = adminService.deleteUser(id, adminId);
-      if (!deleted) return res.status(404).json({ error: 'User not found' });
+      if (!deleted) return next(new AppError('NOT_FOUND', 'User not found', 404));
       res.json({ message: 'User deleted successfully' });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to delete user' });
+      logger.error('Failed to delete user', { error: String(error) });
+      next(new AppError('ADMIN_DELETE_FAILED', 'Failed to delete user', 500));
     }
   });
 
-  // GET /api/v1/admin/groups — List all groups for moderation
-  router.get('/admin/groups', adminAuthMiddleware, async (_req, res) => {
+  router.get('/admin/groups', adminAuthMiddleware, async (req, res, next) => {
     try {
-      // Get groups from contract event indexer or mock data
+      const pageParams = parseOffsetParams(req.query, { limit: 20 });
       const { mockGroups } = await import('../mock_data');
-      res.json({ groups: mockGroups });
+      res.json(paginateArray(mockGroups, pageParams));
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch groups' });
+      logger.error('Failed to fetch groups', { error: String(error) });
+      next(new AppError('ADMIN_FETCH_FAILED', 'Failed to fetch groups', 500));
     }
   });
 
-  // POST /api/v1/admin/groups/:id/flag — Flag/unflag a group for review
-  router.post('/admin/groups/:id/flag', adminAuthMiddleware, async (req: any, res) => {
+  router.post('/admin/groups/:id/flag', adminAuthMiddleware, validateParams(schemas.idParam), validateBody(schemas.adminGroupFlag), async (req: any, res, next) => {
     try {
       const { id } = req.params;
       const { flagged, adminId } = req.body;
-      if (typeof flagged !== 'boolean') return res.status(400).json({ error: 'flagged must be boolean' });
-      if (!adminId) return res.status(400).json({ error: 'adminId is required' });
-
-      // For now, return the flagged group (in production, persist this)
       const { mockGroups } = await import('../mock_data');
       const group = mockGroups.find((g: any) => g.id === id);
-      if (!group) return res.status(404).json({ error: 'Group not found' });
-
-      // Log the action
+      if (!group) return next(new AppError('NOT_FOUND', 'Group not found', 404));
       adminService.logAction(adminId, 'FLAG_GROUP', id, 'Group', { flagged });
-
       res.json({ ...group, flagged });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to flag group' });
+      logger.error('Failed to flag group', { error: String(error) });
+      next(new AppError('ADMIN_UPDATE_FAILED', 'Failed to flag group', 500));
     }
   });
 
-  // GET /api/v1/admin/audit-logs — Fetch audit logs (redirects to /api/admin/audit-log)
-  router.get('/admin/audit-logs', adminAuthMiddleware, async (_req, res) => {
+  router.get('/admin/audit-logs', adminAuthMiddleware, async (req, res, next) => {
     try {
-      const logs = adminService.getAuditLogs();
-      res.json({ logs });
+      const pageParams = parseOffsetParams(req.query, { limit: 20 });
+      const allLogs = adminService.getAuditLogs();
+      res.json(paginateArray(allLogs, pageParams));
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch audit logs' });
+      logger.error('Failed to fetch audit logs', { error: String(error) });
+      next(new AppError('ADMIN_FETCH_FAILED', 'Failed to fetch audit logs', 500));
     }
   });
 
   // ── API Key Management (Issue #1030) ──────────────────────────────────────
 
-  // POST /api/v1/api-keys — Create a new API key
-  router.post('/api-keys', async (req: any, res: any) => {
-    try {
-      const { userId } = req.body;
-      if (!userId) return res.status(400).json({ error: 'userId is required' });
-
-      const { key, info } = await apiKeyService.generateKey(userId, req.body.name || 'API Key', req.body.tier || 'free');
-      res.status(201).json({ key, info: { ...info, keyPrefix: info.keyPrefix } });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to generate API key' });
+  router.post(
+    '/api-keys',
+    validateBody(schemas.apiKeyCreate),
+    async (req: any, res: any, next: NextFunction) => {
+      try {
+        const { userId, name, tier } = req.body;
+        const { key, info } = await apiKeyService.generateKey(
+          userId,
+          name || 'API Key',
+          tier || 'free'
+        );
+        res.status(201).json({ key, info: { ...info, keyPrefix: info.keyPrefix } });
+      } catch (error) {
+        logger.error('Failed to generate API key', { error: String(error) });
+        next(new AppError('API_KEY_CREATION_FAILED', 'Failed to generate API key', 500));
+      }
     }
-  });
+  );
 
-  // GET /api/v1/api-keys — List API keys for authenticated user
-  router.get('/api-keys', apiKeyAuthMiddleware, async (req: any, res: any) => {
-    try {
-      const keys = await apiKeyService.getKeysForUser(req.apiKey.userId);
-      res.json({ keys });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch API keys' });
+  router.delete(
+    '/api-keys/:keyId',
+    apiKeyAuthMiddleware,
+    validateParams(schemas.keyIdParam),
+    async (req: any, res: any, next: NextFunction) => {
+      try {
+        await apiKeyService.revokeKey(req.params.keyId);
+        res.json({ message: 'API key revoked' });
+      } catch (error) {
+        logger.error('Failed to revoke API key', { error: String(error) });
+        next(new AppError('API_KEY_REVOKE_FAILED', 'Failed to revoke API key', 500));
+      }
     }
-  });
+  );
 
-  // DELETE /api/v1/api-keys/:keyId — Revoke an API key
-  router.delete('/api-keys/:keyId', apiKeyAuthMiddleware, async (req: any, res: any) => {
-    try {
-      const { keyId } = req.params;
-      await apiKeyService.revokeKey(keyId);
-      res.json({ message: 'API key revoked' });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to revoke API key' });
+  router.get(
+    '/api-keys/:keyId/usage',
+    apiKeyAuthMiddleware,
+    validateParams(schemas.keyIdParam),
+    async (req: any, res: any, next: NextFunction) => {
+      try {
+        const stats = await apiKeyService.getUsageStats(
+          req.params.keyId,
+          parseInt(req.query.hours as string) || 24
+        );
+        res.json(stats);
+      } catch (error) {
+        logger.error('Failed to fetch usage stats', { error: String(error) });
+        next(new AppError('API_KEY_STATS_FAILED', 'Failed to fetch usage stats', 500));
+      }
     }
-  });
-
-  // GET /api/v1/api-keys/:keyId/usage — Get usage stats for a key
-  router.get('/api-keys/:keyId/usage', apiKeyAuthMiddleware, async (req: any, res: any) => {
-    try {
-      const { keyId } = req.params;
-      const stats = await apiKeyService.getUsageStats(keyId, parseInt(req.query.hours as string) || 24);
-      res.json(stats);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch usage stats' });
-    }
-  });
+  );
 
   // ── Public API Endpoints (Issue #1030) ────────────────────────────────────
 
-  // GET /api/v1/public/groups — Public list of groups
-  router.get('/public/groups', apiKeyAuthMiddleware, async (req: any, res: any) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-      const offset = parseInt(req.query.offset as string) || 0;
-
-      const groups = await (eventIndexer as any).prisma.contractEvent.findMany({
-        where: { eventType: 'GroupCreated' },
-        orderBy: { timestamp: 'desc' },
-        take: limit,
-        skip: offset,
-      });
-
-      await recordApiUsage(req, res);
-      res.json({ count: groups.length, limit, offset, groups });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch groups' });
+  router.get(
+    '/public/groups',
+    apiKeyAuthMiddleware,
+    async (req: any, res: any, next: NextFunction) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const groups = await (eventIndexer as any).prisma.contractEvent.findMany({
+          where: { eventType: 'GroupCreated' },
+          orderBy: { timestamp: 'desc' },
+          take: limit,
+          skip: offset,
+        });
+        await recordApiUsage(req, res);
+        res.json({ count: groups.length, limit, offset, groups: groups.map(toContractEventDTO) });
+      } catch (error) {
+        logger.error('Failed to fetch public groups', { error: String(error) });
+        next(new AppError('FETCH_FAILED', 'Failed to fetch groups', 500));
+      }
     }
-  });
+  );
 
-  // GET /api/v1/public/stats — Public platform statistics
-  router.get('/public/stats', apiKeyAuthMiddleware, async (req: any, res: any) => {
-    try {
-      const stats = await analyticsService.getGroupsOverviewStats();
-      await recordApiUsage(req, res);
-      res.json(stats);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch statistics' });
+  router.get(
+    '/public/stats',
+    apiKeyAuthMiddleware,
+    async (req: any, res: any, next: NextFunction) => {
+      try {
+        const stats = await analyticsService.getGroupsOverviewStats();
+        await recordApiUsage(req, res);
+        res.json(stats);
+      } catch (error) {
+        logger.error('Failed to fetch public stats', { error: String(error) });
+        next(new AppError('FETCH_FAILED', 'Failed to fetch statistics', 500));
+      }
     }
-  });
+  );
 
   return router;
 }

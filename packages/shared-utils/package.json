@@ -1,0 +1,23 @@
+{
+  "name": "@stellar-save/shared-utils",
+  "version": "0.1.0",
+  "description": "Shared utility functions for Stellar-Save frontend and backend",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.9"
+  },
+  "files": ["dist"],
+  "license": "MIT"
+}

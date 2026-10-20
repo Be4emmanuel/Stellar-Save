@@ -6,18 +6,8 @@
  * and reject unauthenticated requests.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-
-// Mock auth middleware for testing
-const createMockAuthMiddleware = (requireAdmin = true) => {
-  return (req: any, res: any, next: any) => {
-    if (requireAdmin && !req.adminId && !req.headers['x-admin-secret']) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    req.adminId = 'test_admin_123';
-    next();
-  };
-};
+import { describe, it, expect } from '@jest/globals';
+import { AuditFactory } from '../../test/fixtures/factory';
 
 describe('Admin Endpoints Authorization', () => {
   describe('Platform Stats Endpoint', () => {
@@ -45,7 +35,7 @@ describe('Admin Endpoints Authorization', () => {
       const req = {
         method: 'PATCH',
         path: '/admin/users/user_123',
-        body: { updates: { name: 'Updated' }, adminId: 'admin_001' }
+        body: { updates: { name: 'Updated' }, adminId: 'admin_001' },
       };
       expect(req.body.adminId).toBe('admin_001');
     });
@@ -54,7 +44,7 @@ describe('Admin Endpoints Authorization', () => {
       const req = {
         method: 'PATCH',
         path: '/admin/users/user_123',
-        body: { updates: { name: 'Updated' } } // Missing adminId
+        body: { updates: { name: 'Updated' } }, // Missing adminId
       };
       expect(req.body.adminId).toBeUndefined();
     });
@@ -63,7 +53,7 @@ describe('Admin Endpoints Authorization', () => {
       const req = {
         method: 'DELETE',
         path: '/admin/users/user_123',
-        body: { adminId: 'admin_001' }
+        body: { adminId: 'admin_001' },
       };
       expect(req.body.adminId).toBe('admin_001');
     });
@@ -72,7 +62,7 @@ describe('Admin Endpoints Authorization', () => {
       const req = {
         method: 'DELETE',
         path: '/admin/users/user_123',
-        body: {} // Missing adminId
+        body: {}, // Missing adminId
       };
       expect(req.body.adminId).toBeUndefined();
     });
@@ -88,7 +78,7 @@ describe('Admin Endpoints Authorization', () => {
       const req = {
         method: 'POST',
         path: '/admin/groups/group_123/flag',
-        body: { flagged: true, adminId: 'admin_001' }
+        body: { flagged: true, adminId: 'admin_001' },
       };
       expect(typeof req.body.flagged).toBe('boolean');
       expect(req.body.adminId).toBe('admin_001');
@@ -98,7 +88,7 @@ describe('Admin Endpoints Authorization', () => {
       const req = {
         method: 'POST',
         path: '/admin/groups/group_123/flag',
-        body: { flagged: 'true', adminId: 'admin_001' } // String instead of boolean
+        body: { flagged: 'true', adminId: 'admin_001' }, // String instead of boolean
       };
       expect(typeof req.body.flagged).not.toBe('boolean');
     });
@@ -107,7 +97,7 @@ describe('Admin Endpoints Authorization', () => {
       const req = {
         method: 'POST',
         path: '/admin/groups/group_123/flag',
-        body: { flagged: true } // Missing adminId
+        body: { flagged: true }, // Missing adminId
       };
       expect(req.body.adminId).toBeUndefined();
     });
@@ -127,42 +117,36 @@ describe('Admin Endpoints Authorization', () => {
 
   describe('Audit Trail of Admin Actions', () => {
     it('should log user updates to audit trail', async () => {
-      const action = {
-        type: 'UPDATE_USER',
+      const action = AuditFactory.buildAuditLog('UPDATE_USER', {
+        userId: 'admin_001',
         targetId: 'user_123',
         targetType: 'Member',
-        adminId: 'admin_001',
-        timestamp: Date.now(),
-        metadata: { changes: { name: 'New Name' } }
-      };
-      expect(action.type).toBe('UPDATE_USER');
-      expect(action.adminId).toBe('admin_001');
+        metadata: { changes: { name: 'New Name' } },
+      });
+      expect(action.action).toBe('UPDATE_USER');
+      expect(action.userId).toBe('admin_001');
     });
 
     it('should log user deletions to audit trail', async () => {
-      const action = {
-        type: 'DELETE_USER',
+      const action = AuditFactory.buildAuditLog('DELETE_USER', {
+        userId: 'admin_001',
         targetId: 'user_123',
         targetType: 'Member',
-        adminId: 'admin_001',
-        timestamp: Date.now()
-      };
-      expect(action.type).toBe('DELETE_USER');
-      expect(action.adminId).toBe('admin_001');
+      });
+      expect(action.action).toBe('DELETE_USER');
+      expect(action.userId).toBe('admin_001');
     });
 
     it('should log group flags to audit trail', async () => {
-      const action = {
-        type: 'FLAG_GROUP',
+      const action = AuditFactory.buildAuditLog('FLAG_GROUP', {
+        userId: 'admin_001',
         targetId: 'group_123',
         targetType: 'Group',
-        adminId: 'admin_001',
-        timestamp: Date.now(),
-        metadata: { flagged: true }
-      };
-      expect(action.type).toBe('FLAG_GROUP');
-      expect(action.adminId).toBe('admin_001');
-      expect(action.metadata.flagged).toBe(true);
+        metadata: { flagged: true },
+      });
+      expect(action.action).toBe('FLAG_GROUP');
+      expect(action.userId).toBe('admin_001');
+      expect((action.metadata as any).flagged).toBe(true);
     });
   });
 
@@ -174,7 +158,7 @@ describe('Admin Endpoints Authorization', () => {
         '/admin/users/:id',
         '/admin/groups',
         '/admin/groups/:id/flag',
-        '/admin/audit-logs'
+        '/admin/audit-logs',
       ];
 
       for (const endpoint of adminEndpoints) {
@@ -187,8 +171,8 @@ describe('Admin Endpoints Authorization', () => {
       // Mock response object
       const res = {
         status: (code: number) => ({
-          json: (data: any) => ({ statusCode: code, body: data })
-        })
+          json: (data: any) => ({ statusCode: code, body: data }),
+        }),
       };
 
       // Without auth header

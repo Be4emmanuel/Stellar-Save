@@ -1,5 +1,9 @@
 // Re-export shared primitives from the canonical SDK package so there is a
 // single source of truth for these types across frontend, backend, and mobile.
+//
+// NOTE: The GraphQL API uses separate Group / Member types — see the generated
+// types in `src/generated/graphql.ts` (Group, Member, GetGroupQuery, etc.).
+// The types below are the REST API / UI-layer shapes used by the frontend.
 export type { GroupStatus, PaginationMeta } from '@stellar-save/sdk';
 
 import type { FilterState, SortOption } from '../components/GroupFilters';
@@ -69,18 +73,9 @@ export interface GroupDetail extends PublicGroup {
   startedAt: Date | null;
 }
 
-// ─── useGroup return type ─────────────────────────────────────────────────────
-
-export interface UseGroupReturn {
-  /** Full group detail, null while loading or on error */
-  group: GroupDetail | null;
-  /** True during the initial fetch or a manual refresh */
-  isLoading: boolean;
-  /** Error message, null when no error */
-  error: string | null;
-  /** Manually re-fetch (busts cache) */
-  refresh: () => void;
-}
+// Note: the `useGroup()` hook's return type (`UseGroupReturn`) lives in
+// `hooks/useGroup.ts` since it wraps `DetailedGroup` (members/contributions/
+// cycles) from `utils/groupApi`, not the lighter-weight `GroupDetail` above.
 
 // ─── Hook return type ─────────────────────────────────────────────────────────
 

@@ -11,7 +11,7 @@ const FOCUSABLE_SELECTORS = [
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)).filter(
-    (el) => !el.closest('[aria-hidden="true"]'),
+    (el) => !el.closest('[aria-hidden="true"]')
   );
 }
 
@@ -25,7 +25,7 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
  */
 export function useFocusTrap(
   containerRef: React.RefObject<HTMLElement | null>,
-  active: boolean,
+  active: boolean
 ): void {
   const previousFocusRef = useRef<Element | null>(null);
 
@@ -79,6 +79,14 @@ export function useFocusTrap(
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      // Also restore focus when the component unmounts while still active
+      // (e.g. a parent conditionally renders the dialog rather than keeping
+      // it mounted and toggling `active`) — otherwise focus would be lost
+      // to <body> instead of returning to the triggering element.
+      if (previousFocusRef.current instanceof HTMLElement) {
+        previousFocusRef.current.focus();
+      }
+      previousFocusRef.current = null;
     };
   }, [active, containerRef]);
 }

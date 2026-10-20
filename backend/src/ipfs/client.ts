@@ -1,3 +1,5 @@
+import { withRetry } from '@stellar-save/shared-utils';
+
 import { config } from '../config';
 import { logger } from '../logger';
 
@@ -16,33 +18,79 @@ export interface IpfsPinStatus {
   type: 'direct' | 'recursive' | 'indirect';
 }
 
+export interface RetryConfig {
+  /**
+   * Number of retries *after* the initial attempt, so 2 means up to 3 calls in
+   * total. Retained as-is for backwards compatibility; the shared utility
+   * counts total attempts instead, so this is translated at the call site.
+   */
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffMultiplier?: number;
+}
+
+const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
+  maxRetries: 3,
+  initialDelayMs: 100,
+  maxDelayMs: 5000,
+  backoffMultiplier: 2,
+};
+
 async function ipfsFetch(
   baseUrl: string,
   path: string,
-  options: { method?: string; body?: FormData; timeout?: number } = {},
+  options: { method?: string; body?: FormData; timeout?: number; retryConfig?: RetryConfig } = {}
 ): Promise<Response> {
   const url = new URL(`${baseUrl}${path}`);
-  const { method = 'POST', body, timeout = 30000 } = options;
+  const { method = 'POST', body, timeout = 30000, retryConfig } = options;
+  const finalRetryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  return withRetry(
+    async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
 
-  try {
-    return await fetch(url.toString(), {
-      method,
-      body,
-      signal: controller.signal,
-      headers: body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+      try {
+        return await fetch(url.toString(), {
+          method,
+          body,
+          signal: controller.signal,
+          headers: body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    {
+      // `maxRetries` excludes the initial attempt; `withRetry` counts it.
+      attempts: finalRetryConfig.maxRetries + 1,
+      initialDelayMs: finalRetryConfig.initialDelayMs,
+      maxDelayMs: finalRetryConfig.maxDelayMs,
+      backoffMultiplier: finalRetryConfig.backoffMultiplier,
+      // Delays here stay deterministic: the client's tests assert on wall-clock
+      // elapsed time, and IPFS pinning is not a high-contention path where
+      // lockstep retries are a concern.
+      jitter: 0,
+      onRetry: ({ attempt, error }) => {
+        logger.debug('[ipfs] retrying after error', {
+          attempt: attempt + 1,
+          path,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    }
+  ).catch((error: unknown) => {
+    // `withRetry` rethrows the original value, but this client has always
+    // surfaced an Error, and callers read `.message` off it.
+    throw error instanceof Error ? error : new Error(String(error));
+  });
 }
 
 async function ipfsJson<T>(
   baseUrl: string,
   path: string,
-  options: { method?: string; body?: FormData; timeout?: number } = {},
+  options: { method?: string; body?: FormData; timeout?: number; retryConfig?: RetryConfig } = {}
 ): Promise<T> {
   const res = await ipfsFetch(baseUrl, path, options);
   if (!res.ok) {
@@ -55,10 +103,12 @@ async function ipfsJson<T>(
 export class IpfsClient {
   private baseUrl: string;
   private timeout: number;
+  private retryConfig: Required<RetryConfig>;
 
-  constructor(baseUrl?: string, timeout?: number) {
+  constructor(baseUrl?: string, timeout?: number, retryConfig?: RetryConfig) {
     this.baseUrl = baseUrl ?? config.ipfs.apiUrl;
     this.timeout = timeout ?? config.ipfs.apiTimeoutMs;
+    this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
   }
 
   async add(data: string | Buffer, filename = 'metadata.json'): Promise<IpfsAddResult> {
@@ -69,6 +119,7 @@ export class IpfsClient {
     const result = await ipfsJson<{ Hash: string; Size: string }>(this.baseUrl, '/api/v0/add', {
       body: formData,
       timeout: this.timeout,
+      retryConfig: this.retryConfig,
     });
     return { cid: result.Hash, size: parseInt(result.Size, 10) };
   }
@@ -78,7 +129,7 @@ export class IpfsClient {
     const result = await ipfsJson<{ Pins: string[] }>(
       this.baseUrl,
       `/api/v0/pin/add?${params.toString()}`,
-      { timeout: this.timeout },
+      { timeout: this.timeout, retryConfig: this.retryConfig }
     );
     return { cid, pinned: result.Pins.includes(cid) };
   }
@@ -88,7 +139,7 @@ export class IpfsClient {
     const result = await ipfsJson<{ Pins: string[] }>(
       this.baseUrl,
       `/api/v0/pin/rm?${params.toString()}`,
-      { timeout: this.timeout },
+      { timeout: this.timeout, retryConfig: this.retryConfig }
     );
     return { cid, pinned: !result.Pins.includes(cid) };
   }
@@ -101,7 +152,7 @@ export class IpfsClient {
     const result = await ipfsJson<{ Keys: Record<string, { Type: string }> }>(
       this.baseUrl,
       `/api/v0/pin/ls?${params.toString()}`,
-      { timeout: this.timeout },
+      { timeout: this.timeout, retryConfig: this.retryConfig }
     );
     return Object.entries(result.Keys ?? {}).map(([key, val]) => ({
       cid: key,
@@ -112,6 +163,7 @@ export class IpfsClient {
   async cat(cid: string): Promise<string> {
     const res = await ipfsFetch(this.baseUrl, `/api/v0/cat?arg=${encodeURIComponent(cid)}`, {
       timeout: this.timeout,
+      retryConfig: this.retryConfig,
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -121,11 +173,10 @@ export class IpfsClient {
   }
 
   async id(): Promise<{ id: string; addresses: string[] }> {
-    const result = await ipfsJson<{ ID: string; Addresses: string[] }>(
-      this.baseUrl,
-      '/api/v0/id',
-      { timeout: this.timeout },
-    );
+    const result = await ipfsJson<{ ID: string; Addresses: string[] }>(this.baseUrl, '/api/v0/id', {
+      timeout: this.timeout,
+      retryConfig: this.retryConfig,
+    });
     return { id: result.ID, addresses: result.Addresses };
   }
 

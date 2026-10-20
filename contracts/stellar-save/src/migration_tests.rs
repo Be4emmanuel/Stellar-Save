@@ -15,7 +15,7 @@ mod migration_tests {
         group::{Group, GroupStatus, TokenConfig},
         migration::{get_schema_version, load_migration_record, V1, V2},
         migrations::v1_to_v2,
-        storage::{GroupKey, StorageKey, StorageKeyBuilder},
+        storage::{StorageKey, StorageKeyBuilder},
         ContractConfig,
     };
 
@@ -35,6 +35,8 @@ mod migration_tests {
             max_members: 20,
             min_cycle_duration: 1,
             max_cycle_duration: u64::MAX,
+            treasury: None,
+            creation_fee: 0,
         };
         env.storage()
             .persistent()
@@ -76,7 +78,7 @@ mod migration_tests {
     fn has_token_config(env: &Env, group_id: u64) -> bool {
         env.storage()
             .persistent()
-            .has(&StorageKey::Group(GroupKey::TokenConfig(group_id)))
+            .has(&StorageKey::GrpTok(group_id))
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -119,7 +121,7 @@ mod migration_tests {
         };
         env.storage()
             .persistent()
-            .set(&StorageKey::Group(GroupKey::TokenConfig(1)), &custom_config);
+            .set(&StorageKey::GrpTok(1), &custom_config);
 
         v1_to_v2::apply(&env, &admin, xlm.clone());
 
@@ -127,7 +129,7 @@ mod migration_tests {
         let stored: TokenConfig = env
             .storage()
             .persistent()
-            .get(&StorageKey::Group(GroupKey::TokenConfig(1)))
+            .get(&StorageKey::GrpTok(1))
             .unwrap();
         assert_eq!(stored.token_address, custom_token);
         assert_eq!(stored.token_decimals, 6);
@@ -136,7 +138,7 @@ mod migration_tests {
         let stored2: TokenConfig = env
             .storage()
             .persistent()
-            .get(&StorageKey::Group(GroupKey::TokenConfig(2)))
+            .get(&StorageKey::GrpTok(2))
             .unwrap();
         assert_eq!(stored2.token_address, xlm);
         assert_eq!(stored2.token_decimals, 7);
@@ -155,7 +157,7 @@ mod migration_tests {
         // Pre-seed TokenConfig for group 1 (should survive rollback).
         let custom_token = Address::generate(&env);
         env.storage().persistent().set(
-            &StorageKey::Group(GroupKey::TokenConfig(1)),
+            &StorageKey::GrpTok(1),
             &TokenConfig {
                 token_address: custom_token.clone(),
                 token_decimals: 6,
@@ -251,5 +253,80 @@ mod migration_tests {
         let env = Env::default();
         // No storage written — must default to V1.
         assert_eq!(get_schema_version(&env), V1);
+    }
+
+    // ── ContributionRecord field-name regression tests ────────────────────────
+
+    /// Verifies that ContributionRecord uses `member_address` (not `member`) and
+    /// that the field survives a v1→v2 migration round-trip intact.
+    ///
+    /// This test was added as part of the struct/doc alignment cleanup after
+    /// several test files were found accessing `record.member` which is not a
+    /// valid field on `ContributionRecord`. The canonical field is `member_address`.
+    #[test]
+    fn test_contribution_record_member_address_field_survives_migration() {
+        use crate::{contribution::ContributionRecord, storage::StorageKeyBuilder};
+
+        let (env, admin) = setup_env();
+        let creator = Address::generate(&env);
+        let member = Address::generate(&env);
+        let xlm = xlm_token(&env);
+
+        seed_group(&env, 1, &creator);
+        set_total_groups(&env, 1);
+
+        // Write a ContributionRecord using the correct member_address field.
+        let record = ContributionRecord::new(
+            member.clone(),
+            1,   // group_id
+            0,   // cycle_number
+            5_000_000,
+            env.ledger().timestamp(),
+        );
+        let key = StorageKeyBuilder::contribution_individual(1, 0, member.clone());
+        env.storage().persistent().set(&key, &record);
+
+        // Run migration forward then backward.
+        v1_to_v2::apply(&env, &admin, xlm.clone());
+        v1_to_v2::rollback(&env, &admin);
+
+        // The record must still be readable and the member_address field must match.
+        let stored: ContributionRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .expect("ContributionRecord must survive v1→v2→v1 round-trip");
+
+        // Canonical field: member_address (NOT member)
+        assert_eq!(stored.member_address, member,
+            "ContributionRecord.member_address must be preserved across migration");
+        assert_eq!(stored.group_id, 1);
+        assert_eq!(stored.cycle_number, 0);
+        assert_eq!(stored.amount, 5_000_000);
+    }
+
+    /// Verifies that ContributionRecord fields are all accessible after migration
+    /// and that there is no field named `member` on the struct.
+    #[test]
+    fn test_contribution_record_has_all_expected_fields() {
+        use crate::contribution::ContributionRecord;
+
+        let env = Env::default();
+        let member = Address::generate(&env);
+
+        let record = ContributionRecord::new(
+            member.clone(),
+            42,
+            3,
+            10_000_000,
+            1_700_000_000,
+        );
+
+        // All five fields must be accessible under their canonical names.
+        assert_eq!(record.member_address, member);
+        assert_eq!(record.group_id, 42);
+        assert_eq!(record.cycle_number, 3);
+        assert_eq!(record.amount, 10_000_000);
+        assert_eq!(record.timestamp, 1_700_000_000);
     }
 }

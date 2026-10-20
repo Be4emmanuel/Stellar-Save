@@ -1,3 +1,5 @@
+> For why this crate is split into `pool.rs`, `governance/`, `payout_executor.rs`, and the rest of its ~30 modules, see [ADR-004: Contract Module Boundaries](../../docs/adr/ADR-004-contract-module-boundaries.md).
+
 # Quick Reference: get_member_total_contributions
 
 ## Function Call

@@ -1,25 +1,32 @@
+import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import { CreateGroupForm } from '../components/CreateGroupForm';
+import { LoadingState } from '../components/LoadingState';
+import { ErrorState } from '../components/ErrorState';
 import { useWallet } from '../hooks/useWallet';
+import { queryKeys } from '../lib/queryKeys';
 import { updateInsuranceSettings } from '../utils/insuranceApi';
+
 import type { GroupData } from '../utils/groupApi';
 
 const CreateGroupPage: React.FC = () => {
   const { activeAddress } = useWallet();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [txStatus, setTxStatus] = useState<string>('');
+  const [txError, setTxError] = useState<string | null>(null);
 
   const handleSubmit = async (data: GroupData) => {
     if (!activeAddress) {
-      alert("Please connect your Freighter wallet first!");
+      setTxError('Please connect your Freighter wallet first!');
       return;
     }
 
     setIsSubmitting(true);
-    setTxStatus("Submitting transaction to Stellar…");
+    setTxError(null);
 
     try {
       // TODO: Replace with actual Soroban contract call
@@ -29,18 +36,19 @@ const CreateGroupPage: React.FC = () => {
 
       // Persist insurance settings if enabled
       if (data.insuranceEnabled) {
-        setTxStatus("Configuring insurance pool…");
         await updateInsuranceSettings(mockGroupId, {
           enabled: true,
           premiumRate: data.insurancePremiumRate / 100,
         });
       }
 
-      setTxStatus("✅ Group created successfully!");
+      // A brand-new group should show up in the shared groups list the
+      // next time GroupsPage/BrowseGroupsPage read from the cache.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.groups.all() });
       setTimeout(() => navigate('/dashboard'), 2500);
     } catch (error) {
-      console.error("Failed to create group:", error);
-      setTxStatus("❌ Failed to create group. Please try again.");
+      console.error('Failed to create group:', error);
+      setTxError('Failed to create group. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -52,9 +60,7 @@ const CreateGroupPage: React.FC = () => {
     <div className="create-group-page">
       <div className="page-header">
         <h1>Create New ROSCA Group</h1>
-        <p className="page-subtitle">
-          Set up a new Rotating Savings and Credit Association group
-        </p>
+        <p className="page-subtitle">Set up a new Rotating Savings and Credit Association group</p>
       </div>
 
       <CreateGroupForm
@@ -63,10 +69,10 @@ const CreateGroupPage: React.FC = () => {
         isSubmitting={isSubmitting}
       />
 
-      {txStatus && (
-        <div className="tx-status-message">
-          <p>{txStatus}</p>
-        </div>
+      {isSubmitting && <LoadingState message="Submitting transaction to Stellar…" />}
+
+      {txError && !isSubmitting && (
+        <ErrorState message={txError} onRetry={() => setTxError(null)} retryLabel="Dismiss" />
       )}
     </div>
   );

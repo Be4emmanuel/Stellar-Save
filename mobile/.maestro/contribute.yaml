@@ -52,17 +52,25 @@ appId: com.stellarsave.app
 - tapOn:
     id: "confirm-transaction-button"
 
-# Step 10: Success modal
-- assertVisible:
-    id: "contribution-success-modal"
+# Step 10: Wait for blockchain confirmation before asserting success.
+# The transaction round-trip can take several seconds; polling avoids a
+# time-dependent race between tx broadcast and UI render.
+- extendedWaitUntil:
+    visible:
+      id: "contribution-success-modal"
+    timeout: 30000
 - assertVisible:
     text: "Contribution Successful"
 
 # Step 11: Dismiss success and return to group detail
 - tapOn:
     id: "close-success-modal-button"
-- assertVisible:
-    id: "group-detail-screen"
+# Wait for the modal dismiss animation and data reload to complete before
+# checking progress bar state, preventing an assertion on stale UI.
+- extendedWaitUntil:
+    visible:
+      id: "group-detail-screen"
+    timeout: 10000
 
 # Step 12: Cycle progress should reflect the contribution
 - assertVisible:

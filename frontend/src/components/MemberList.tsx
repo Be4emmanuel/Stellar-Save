@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
+
 import './MemberList.css';
-import { Card } from './Card';
 import { Avatar } from './Avatar';
 import { Badge } from './Badge';
+import { Card } from './Card';
 
 type SortField = 'address' | 'contribution' | 'payout';
 type SortOrder = 'asc' | 'desc';
@@ -102,18 +103,12 @@ export function MemberList({ members, className = '' }: MemberListProps) {
                 </span>
               </div>
               <div className="member-status">
-                <Badge
-                  variant={member.hasContributed ? 'success' : 'secondary'}
-                  size="sm"
-                >
+                <Badge variant={member.hasContributed ? 'success' : 'secondary'} size="sm">
                   {member.hasContributed ? '✓' : '○'}
                 </Badge>
               </div>
               <div className="member-status">
-                <Badge
-                  variant={member.hasPaidOut ? 'success' : 'secondary'}
-                  size="sm"
-                >
+                <Badge variant={member.hasPaidOut ? 'success' : 'secondary'} size="sm">
                   {member.hasPaidOut ? '✓' : '○'}
                 </Badge>
               </div>
@@ -122,9 +117,7 @@ export function MemberList({ members, className = '' }: MemberListProps) {
         </div>
       </div>
 
-      {members.length === 0 && (
-        <div className="member-list-empty">No members yet</div>
-      )}
+      {members.length === 0 && <div className="member-list-empty">No members yet</div>}
     </Card>
   );
 }

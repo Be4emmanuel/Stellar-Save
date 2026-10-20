@@ -1,5 +1,9 @@
+import { logger } from './logger';
 import * as redis from './redis';
-//import type { PrismaClient } from '@prisma/client';
+import { CacheKeyBuilder } from './lib/cache-key-builder';
+import { CACHE_TTL_SECONDS } from './lib/cache-config';
+
+import type { PrismaClient } from '@prisma/client';
 
 export interface GroupCycleStats {
   cycleNumber: number;
@@ -98,16 +102,15 @@ export interface AnalyticsReport {
   reportName: string;
   startDate: Date;
   endDate: Date;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   generatedAt: Date;
 }
 
 export class AnalyticsService {
-  private prisma: any;
+  private prisma: PrismaClient;
   private cacheClient = redis;
-  private cacheTTL = 3600; // 1 hour default
 
-  constructor(prisma: any) {
+  constructor(prisma: PrismaClient) {
     this.prisma = prisma;
   }
 
@@ -116,11 +119,12 @@ export class AnalyticsService {
    */
   async getPlatformStats(date?: Date): Promise<PlatformStats | null> {
     const targetDate = date || new Date();
-    const cacheKey = `platform_stats:${targetDate.toISOString().split('T')[0]}`;
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const cacheKey = CacheKeyBuilder.analyticsPlatformStats(dateStr);
 
     // Try to get from cache
     const cached = await this.cacheClient.get(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as PlatformStats;
 
     try {
       // Set and return default if no metrics found for this date
@@ -151,10 +155,10 @@ export class AnalyticsService {
       };
 
       // Cache the result
-      await this.cacheClient.set(cacheKey, stats, this.cacheTTL);
+      await this.cacheClient.set(cacheKey, stats, CACHE_TTL_SECONDS.ANALYTICS_PLATFORM_STATS);
       return stats;
     } catch (error) {
-      console.error('Error fetching platform stats:', error);
+      logger.error('Error fetching platform stats:', error);
       throw error;
     }
   }
@@ -164,11 +168,12 @@ export class AnalyticsService {
    */
   async getUserStats(userId: string, date?: Date): Promise<UserStats | null> {
     const targetDate = date || new Date();
-    const cacheKey = `user_stats:${userId}:${targetDate.toISOString().split('T')[0]}`;
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const cacheKey = CacheKeyBuilder.analyticsUserStats(userId, dateStr);
 
     // Try to get from cache
     const cached = await this.cacheClient.get(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as UserStats;
 
     try {
       const metrics = await this.prisma.userMetrics.findFirst({
@@ -198,10 +203,10 @@ export class AnalyticsService {
       };
 
       // Cache the result
-      await this.cacheClient.set(cacheKey, stats, this.cacheTTL);
+      await this.cacheClient.set(cacheKey, stats, CACHE_TTL_SECONDS.ANALYTICS_USER_STATS);
       return stats;
     } catch (error) {
-      console.error('Error fetching user stats:', error);
+      logger.error('Error fetching user stats:', error);
       throw error;
     }
   }
@@ -211,11 +216,12 @@ export class AnalyticsService {
    */
   async getGroupStats(groupId: string, date?: Date): Promise<GroupStats | null> {
     const targetDate = date || new Date();
-    const cacheKey = `group_stats:${groupId}:${targetDate.toISOString().split('T')[0]}`;
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const cacheKey = `group_stats:${groupId}:${dateStr}`;
 
     // Try to get from cache
     const cached = await this.cacheClient.get(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as GroupStats;
 
     try {
       const metrics = await this.prisma.groupMetrics.findFirst({
@@ -246,10 +252,10 @@ export class AnalyticsService {
       };
 
       // Cache the result
-      await this.cacheClient.set(cacheKey, stats, this.cacheTTL);
+      await this.cacheClient.set(cacheKey, stats, CACHE_TTL_SECONDS.DEFAULT);
       return stats;
     } catch (error) {
-      console.error('Error fetching group stats:', error);
+      logger.error('Error fetching group stats:', error);
       throw error;
     }
   }
@@ -257,7 +263,10 @@ export class AnalyticsService {
   /**
    * Get cycle-by-cycle stats for a group.
    */
-  async getGroupCycleStats(groupId: string, options?: AnalyticsOptions): Promise<GroupCycleStats[]> {
+  async getGroupCycleStats(
+    groupId: string,
+    options?: AnalyticsOptions
+  ): Promise<GroupCycleStats[]> {
     try {
       const metrics = await this.prisma.groupMetrics.findMany({
         where: {
@@ -276,7 +285,7 @@ export class AnalyticsService {
         skip: options?.offset,
       });
 
-      return metrics.map((metric: any, index: number) => ({
+      return metrics.map((metric, index: number) => ({
         cycleNumber: index + 1,
         cycleDate: metric.date,
         memberCount: metric.memberCount,
@@ -289,7 +298,7 @@ export class AnalyticsService {
         churnCount: metric.churnCount,
       }));
     } catch (error) {
-      console.error('Error fetching group cycle stats:', error);
+      logger.error('Error fetching group cycle stats:', error);
       throw error;
     }
   }
@@ -304,7 +313,7 @@ export class AnalyticsService {
   ): Promise<PlatformStats[]> {
     const cacheKey = `platform_trends:${startDate.getTime()}:${endDate.getTime()}`;
     const cached = await this.cacheClient.get(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as PlatformStats[];
 
     try {
       const metrics = await this.prisma.platformMetrics.findMany({
@@ -319,7 +328,7 @@ export class AnalyticsService {
         skip: options?.offset,
       });
 
-      const trends: PlatformStats[] = metrics.map((m: any) => ({
+      const trends: PlatformStats[] = metrics.map((m) => ({
         totalUsers: m.totalUsers,
         activeUsers: m.activeUsers,
         totalGroups: m.totalGroups,
@@ -334,10 +343,10 @@ export class AnalyticsService {
         uniqueWallets: m.uniqueWallets,
       }));
 
-      await this.cacheClient.set(cacheKey, trends, this.cacheTTL);
+      await this.cacheClient.set(cacheKey, trends, CACHE_TTL_SECONDS.DEFAULT);
       return trends;
     } catch (error) {
-      console.error('Error fetching platform trends:', error);
+      logger.error('Error fetching platform trends:', error);
       throw error;
     }
   }
@@ -348,7 +357,7 @@ export class AnalyticsService {
   async getEventStats(options?: AnalyticsOptions): Promise<EventStats[]> {
     const cacheKey = `event_stats:${options?.startDate?.getTime() || 'all'}`;
     const cached = await this.cacheClient.get(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as EventStats[];
 
     try {
       const result = await this.prisma.analyticsEvent.groupBy({
@@ -387,10 +396,10 @@ export class AnalyticsService {
         });
       }
 
-      await this.cacheClient.set(cacheKey, eventStats, this.cacheTTL);
+      await this.cacheClient.set(cacheKey, eventStats, CACHE_TTL_SECONDS.DEFAULT);
       return eventStats;
     } catch (error) {
-      console.error('Error fetching event stats:', error);
+      logger.error('Error fetching event stats:', error);
       throw error;
     }
   }
@@ -403,7 +412,7 @@ export class AnalyticsService {
     eventName: string,
     userId?: string,
     groupId?: string,
-    eventData?: Record<string, any>,
+    eventData?: Record<string, unknown>,
     sessionId?: string
   ): Promise<void> {
     try {
@@ -421,7 +430,7 @@ export class AnalyticsService {
       // Invalidate event stats cache
       await redis.delPattern('event_stats:*');
     } catch (error) {
-      console.error('Error recording analytics event:', error);
+      logger.error('Error recording analytics event:', error);
       // Don't throw - analytics tracking should never break the app
     }
   }
@@ -481,34 +490,52 @@ export class AnalyticsService {
   async resyncSorobanAnalytics(options: SorobanSyncOptions = {}): Promise<SorobanSyncResult> {
     const syncResult = await this.syncSorobanEvents(options);
 
-    const aggregator = new (await import('./analytics_aggregator')).AnalyticsAggregator(this.prisma);
+    const aggregator = new (await import('./analytics_aggregator')).AnalyticsAggregator(
+      this.prisma
+    );
     await aggregator.runAggregation();
 
     return syncResult;
   }
 
-  private normalizeSorobanEvent(event: any):
-    | {
-        eventType: string;
-        eventName: string;
-        userId?: string;
-        groupId?: string;
-        eventData?: Record<string, any>;
-        sessionId?: string;
-      }
-    | null {
+  private normalizeSorobanEvent(event: {
+    id: string;
+    contractId: string;
+    eventType: string;
+    topics: unknown;
+    data: unknown;
+    txHash: string;
+    ledgerSeq: number;
+    timestamp: Date;
+  }): {
+    eventType: string;
+    eventName: string;
+    userId?: string;
+    groupId?: string;
+    eventData?: Record<string, unknown>;
+    sessionId?: string;
+  } | null {
     const rawType = String(event.eventType || '').toLowerCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- contract event data is an open-ended JSON blob from Soroban; shape is unknown at compile time
     const rawData = (event.data as Record<string, any>) || {};
     const topicString = JSON.stringify(event.topics || []).toLowerCase();
     const payloadString = JSON.stringify(rawData).toLowerCase();
-    const isContribution = rawType.includes('contribution') || topicString.includes('contribution') || payloadString.includes('contribution');
-    const isPayout = rawType.includes('payout') || topicString.includes('payout') || payloadString.includes('payout');
+    const isContribution =
+      rawType.includes('contribution') ||
+      topicString.includes('contribution') ||
+      payloadString.includes('contribution');
+    const isPayout =
+      rawType.includes('payout') ||
+      topicString.includes('payout') ||
+      payloadString.includes('payout');
 
     if (!isContribution && !isPayout) {
       return null;
     }
 
-    const amount = Number(rawData.amount ?? rawData.contribution_amount ?? rawData.payout_amount ?? 0);
+    const amount = Number(
+      rawData.amount ?? rawData.contribution_amount ?? rawData.payout_amount ?? 0
+    );
     const userId = rawData.userId ?? rawData.memberId ?? rawData.member_address ?? event.txHash;
     const groupId = rawData.groupId ?? rawData.group_id ?? event.contractId;
 
@@ -561,7 +588,7 @@ export class AnalyticsService {
           metricsCount: platformMetrics.length,
           topEvents: eventStats.slice(0, 10),
         },
-        platformMetrics: platformMetrics.map((m: any) => ({
+        platformMetrics: platformMetrics.map((m) => ({
           date: m.date,
           users: m.totalUsers,
           groups: m.totalGroups,
@@ -571,17 +598,20 @@ export class AnalyticsService {
         statistics: {
           avgUsers:
             platformMetrics.length > 0
-              ? platformMetrics.reduce((sum: number, m: any) => sum + m.totalUsers, 0) /
+              ? platformMetrics.reduce((sum: number, m) => sum + m.totalUsers, 0) /
                 platformMetrics.length
               : 0,
           avgGroups:
             platformMetrics.length > 0
-              ? platformMetrics.reduce((sum: number, m: any) => sum + m.totalGroups, 0) /
+              ? platformMetrics.reduce((sum: number, m) => sum + m.totalGroups, 0) /
                 platformMetrics.length
               : 0,
-          totalContributions: platformMetrics.reduce((sum: number, m: any) => sum + m.totalContributions, 0),
+          totalContributions: platformMetrics.reduce(
+            (sum: number, m) => sum + m.totalContributions,
+            0
+          ),
           totalRevenue: platformMetrics.reduce(
-            (sum: number, m: any) => sum + Number(m.totalContributionAmount),
+            (sum: number, m) => sum + Number(m.totalContributionAmount),
             0
           ),
         },
@@ -609,7 +639,7 @@ export class AnalyticsService {
         generatedAt: report.createdAt,
       };
     } catch (error) {
-      console.error('Error generating report:', error);
+      logger.error('Error generating report:', error);
       throw error;
     }
   }
@@ -617,10 +647,7 @@ export class AnalyticsService {
   /**
    * Get existing reports
    */
-  async getReports(
-    reportType?: string,
-    options?: AnalyticsOptions
-  ): Promise<AnalyticsReport[]> {
+  async getReports(reportType?: string, options?: AnalyticsOptions): Promise<AnalyticsReport[]> {
     try {
       const reports = await this.prisma.analyticsReport.findMany({
         where: reportType ? { reportType } : undefined,
@@ -629,16 +656,16 @@ export class AnalyticsService {
         skip: options?.offset,
       });
 
-      return reports.map((r: any) => ({
+      return reports.map((r) => ({
         reportType: r.reportType,
         reportName: r.reportName,
         startDate: r.startDate,
         endDate: r.endDate,
-        data: r.data as Record<string, any>,
+        data: r.data as Record<string, unknown>,
         generatedAt: r.createdAt,
       }));
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      logger.error('Error fetching reports:', error);
       throw error;
     }
   }
@@ -655,7 +682,6 @@ export class AnalyticsService {
    */
   async getGroupsOverviewStats(): Promise<GroupsOverviewStats> {
     const CACHE_KEY = 'stats:groups:overview';
-    const CACHE_TTL = 300; // 5 minutes
 
     // Return cached value if available
     const cached = await this.cacheClient.get(CACHE_KEY);
@@ -677,7 +703,8 @@ export class AnalyticsService {
         select: { data: true },
       });
 
-      const totalContributed = contributionEvents.reduce((sum: number, event: any) => {
+      const totalContributed = contributionEvents.reduce((sum: number, event: { data: unknown }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma JSON field is typed as unknown; amount shape is an open-ended contract blob
         const amount = Number((event.data as any)?.amount ?? 0);
         return sum + (isNaN(amount) ? 0 : amount);
       }, 0);
@@ -707,10 +734,10 @@ export class AnalyticsService {
         cachedAt: new Date().toISOString(),
       };
 
-      await this.cacheClient.set(CACHE_KEY, stats, CACHE_TTL);
+      await this.cacheClient.set(CACHE_KEY, stats, 300); // 5 minutes
       return stats;
     } catch (error) {
-      console.error('Error fetching groups overview stats:', error);
+      logger.error('Error fetching groups overview stats:', error);
       throw error;
     }
   }
@@ -722,7 +749,7 @@ export class AnalyticsService {
     try {
       await redis.delPattern(pattern);
     } catch (error) {
-      console.error('Error clearing cache:', error);
+      logger.error('Error clearing cache:', error);
     }
   }
 

@@ -1,6 +1,8 @@
 import React from 'react';
-import type { TransactionFilters as FilterType, TransactionType } from '../types/transaction';
+
 import { Badge } from './Badge';
+
+import type { TransactionFilters as FilterType, TransactionType } from '../types/transaction';
 
 interface Props {
   filters: FilterType;
@@ -54,9 +56,7 @@ const TransactionFilters: React.FC<Props> = ({ filters, onChange }) => {
                 aria-pressed={isActive}
                 aria-label={`Filter by type ${t}${isActive ? ', active' : ''}`}
               >
-                <Badge variant={isActive ? 'primary' : 'secondary'}>
-                  {t}
-                </Badge>
+                <Badge variant={isActive ? 'primary' : 'secondary'}>{t}</Badge>
               </div>
             );
           })}
@@ -79,9 +79,7 @@ const TransactionFilters: React.FC<Props> = ({ filters, onChange }) => {
                 aria-pressed={isActive}
                 aria-label={`Filter by status ${s}${isActive ? ', active' : ''}`}
               >
-                <Badge variant={isActive ? 'success' : 'secondary'}>
-                  {s}
-                </Badge>
+                <Badge variant={isActive ? 'success' : 'secondary'}>{s}</Badge>
               </div>
             );
           })}

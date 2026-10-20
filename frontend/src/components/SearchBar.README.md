@@ -51,6 +51,11 @@ function MyComponent() {
 | `className` | `string` | `""` | Additional CSS classes |
 | `defaultValue` | `string` | `""` | Initial value for the search input |
 
+## Implementation Notes
+
+- Debouncing is provided by the shared [`useDebounce`](../hooks/useDebounce.README.md) hook rather than an inline timer, so the same debounce behavior stays consistent across components.
+- Suggestion matching/query normalization lives in `frontend/src/utils/searchUtils.ts` (`normalizeQuery`, `filterSuggestions`), independently unit tested.
+
 ## Behavior
 
 - The `onSearch` callback is debounced, meaning it will only be called after the user stops typing for the specified `debounceMs` duration

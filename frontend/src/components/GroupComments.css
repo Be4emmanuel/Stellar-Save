@@ -8,12 +8,12 @@
   font-size: 1.1rem;
   font-weight: 700;
   margin: 0;
-  color: var(--color-text, #1a1a1a);
+  color: var(--color-text);
 }
 
 .group-comments-count {
   font-weight: 400;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
 }
 
 .group-comments-list {
@@ -26,14 +26,14 @@
 }
 
 .group-comments-empty {
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   font-style: italic;
   padding: 1rem 0;
 }
 
 .group-comment {
-  background: var(--color-surface-alt, #f9f9f9);
-  border: 1px solid var(--color-border, #e5e5e5);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   display: flex;
@@ -51,7 +51,7 @@
 .group-comment-author {
   font-weight: 600;
   font-size: 0.9rem;
-  color: var(--color-text, #1a1a1a);
+  color: var(--color-text);
 }
 
 .group-comment-creator-badge {
@@ -60,18 +60,18 @@
 
 .group-comment-time {
   font-size: 0.8rem;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
 }
 
 .group-comment-content {
   font-size: 0.95rem;
-  color: var(--color-text-secondary, #444);
+  color: var(--color-text-secondary);
   line-height: 1.5;
   word-break: break-word;
 }
 
 .group-comment-content code {
-  background: var(--color-code-bg, #f0f0f0);
+  background: var(--color-code-bg);
   padding: 0.1em 0.35em;
   border-radius: 3px;
   font-family: monospace;
@@ -83,14 +83,14 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-danger, #e53e3e);
+  color: var(--color-danger);
   font-size: 0.8rem;
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
 }
 
 .group-comment-delete:hover {
-  background: var(--color-danger-bg, #fff5f5);
+  background: var(--color-danger-bg);
 }
 
 .group-comments-form {
@@ -102,18 +102,18 @@
 .group-comments-input {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid var(--color-border, #ddd);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 0.95rem;
   resize: vertical;
   font-family: inherit;
-  background: var(--color-surface, #fff);
-  color: var(--color-text, #1a1a1a);
+  background: var(--color-surface);
+  color: var(--color-text);
   box-sizing: border-box;
 }
 
 .group-comments-input:focus {
-  outline: 2px solid var(--color-primary, #6366f1);
+  outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
 
@@ -125,11 +125,13 @@
 
 .group-comments-char-count {
   font-size: 0.8rem;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
 }
 
 .group-comments-submit {
-  background: var(--color-primary, #6366f1);
+  background: var(--color-primary);
+  /* Fixed white text on a solid --color-primary fill — stays AA-compliant in both themes. */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list */
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -149,7 +151,7 @@
 }
 
 .group-comments-login-prompt {
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   font-style: italic;
   font-size: 0.9rem;
   margin: 0;

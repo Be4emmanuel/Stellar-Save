@@ -6,16 +6,26 @@
  */
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import CreateGroupPage from '../../pages/CreateGroupPage';
-import { WalletContext } from '../../wallet/WalletProvider';
-import type { WalletContextValue } from '../../wallet/types';
 import { createGroup } from '../../utils/groupApi';
+import { WalletContext } from '../../wallet/WalletProvider';
+
+import type { WalletContextValue } from '../../wallet/types';
 
 // Mock heavy UI wrappers to keep tests focused on flow logic
 vi.mock('../../ui', () => ({
-  AppLayout: ({ children, title, subtitle }: { children: React.ReactNode; title?: string; subtitle?: string }) => (
+  AppLayout: ({
+    children,
+    title,
+    subtitle,
+  }: {
+    children: React.ReactNode;
+    title?: string;
+    subtitle?: string;
+  }) => (
     <div>
       {title && <h1>{title}</h1>}
       {subtitle && <p>{subtitle}</p>}
@@ -68,8 +78,12 @@ function renderPage() {
  */
 function fillAndSubmit() {
   // Step 1
-  fireEvent.change(screen.getByLabelText(/group name/i), { target: { value: 'My Savings Circle' } });
-  fireEvent.change(screen.getByLabelText(/description/i), { target: { value: 'A community savings group' } });
+  fireEvent.change(screen.getByLabelText(/group name/i), {
+    target: { value: 'My Savings Circle' },
+  });
+  fireEvent.change(screen.getByLabelText(/description/i), {
+    target: { value: 'A community savings group' },
+  });
   fireEvent.click(screen.getByRole('button', { name: /next/i }));
 
   // Step 2

@@ -6,8 +6,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../utils/api';
+
 import { useBackendAuth } from './useBackendAuth';
+import { api } from '../utils/api';
+
 import type { KycStatusResult } from '../types/ramp';
 
 export function useKycStatus(): {
@@ -43,7 +45,9 @@ export function useKycStatus(): {
     }
   }, [isAuthenticated, authenticate]);
 
-  useEffect(() => { void fetchStatus(); }, [fetchStatus]);
+  useEffect(() => {
+    void fetchStatus();
+  }, [fetchStatus]);
 
   return { status, isLoading, error, refresh: fetchStatus };
 }

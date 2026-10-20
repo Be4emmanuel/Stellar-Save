@@ -42,17 +42,23 @@ appId: com.stellarsave.app
 - tapOn:
     id: "confirm-join-button"
 
-# Step 7: Membership confirmed
-- assertVisible:
-    id: "join-success-message"
+# Step 7: Wait for the membership transaction to confirm before asserting.
+# Blockchain round-trip latency makes an immediate assertVisible unreliable.
+- extendedWaitUntil:
+    visible:
+      id: "join-success-message"
+    timeout: 30000
 - assertVisible:
     text: "You've joined"
 
 # Step 8: Navigate to group detail
 - tapOn:
     id: "view-group-detail-button"
-- assertVisible:
-    id: "group-detail-screen"
+# Wait for navigation to settle before asserting group detail content.
+- extendedWaitUntil:
+    visible:
+      id: "group-detail-screen"
+    timeout: 10000
 
 # Step 9: Membership badge is shown
 - assertVisible:

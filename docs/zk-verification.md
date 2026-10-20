@@ -155,3 +155,37 @@ All `.ptau` and `.zkey` files must have their hashes committed in `zk/checksums.
 - **Trusted setup compromise** would allow forged proofs. Mitigate via multi-party ceremony and future migration to transparent setup (PLONK/STARKs) in v2.
 - **Circuit under-constraining** is the most common ZK bug. Every constraint must be checked with both valid and invalid witnesses in tests.
 - See [threat-model.md](threat-model.md) for the overall security posture.
+
+---
+
+## On-Chain Verifier Test Coverage (Issue #1327)
+
+Dedicated unit tests for the on-chain ZK verifier are in `contracts/stellar-save/src/zk_tests.rs`.
+
+### Test Cases
+
+| Test | Covers | CIRCUIT_AUDIT item |
+|------|--------|--------------------|
+| `test_valid_proof_accepted` | Valid Ed25519-based PoC proof passes | — |
+| `test_valid_proof_different_params_accepted` | Valid proof for different group/cycle | — |
+| `test_cross_group_proof_rejected` | Proof for wrong group rejected | ZK-006 |
+| `test_wrong_cycle_proof_rejected` | Proof for wrong cycle rejected | ZK-006 |
+| `test_corrupted_signature_rejected` | Tampered signature rejected | ZK-002 |
+| `test_empty_proof_rejected` | Empty bytes → `None` (malformed) | ZK-002 |
+| `test_truncated_proof_rejected` | Truncated bytes → `None` (malformed) | ZK-005 |
+| `test_oversized_proof_rejected` | Oversized bytes → `None` (malformed) | ZK-005 |
+| `test_replay_attack_same_nullifier_rejected` | Same nonce = replay detected | ZK-001 |
+| `test_different_nonces_not_replay` | Different nonces are independent | ZK-001 |
+| `test_all_zero_public_key_rejected` | All-zero key → `Some(false)` | ZK-004 |
+| `test_all_zero_signature_rejected` | All-zero signature → host panic | ZK-004 |
+| `test_gas_cost_within_acceptable_bounds` | Documents instruction cost bounds | ZK-003 |
+
+### Gas Cost Bounds (Phase-1 PoC)
+
+| Operation | Bound | Notes |
+|-----------|-------|-------|
+| Valid proof | ≤ 100,000 instructions | 1 ed25519_verify call |
+| Invalid/malformed | ≤ 20,000 instructions | Fails before or at crypto |
+| Empty/truncated | ≤ 5,000 instructions | Parse check only |
+
+See `zk/CIRCUIT_AUDIT.md` for all open audit items and their test mapping.

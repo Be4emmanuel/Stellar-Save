@@ -1,8 +1,10 @@
 import https from 'https';
+
 import jwt from 'jsonwebtoken';
-import { logger } from './logger';
-import { deviceTokenService } from './device_token_service';
+
 import { config } from './config';
+import { deviceTokenService } from './device_token_service';
+import { logger } from './logger';
 
 /**
  * Abstract interface for push notification providers
@@ -21,13 +23,14 @@ export interface PushNotificationProvider {
  */
 export class FirebaseProvider implements PushNotificationProvider {
   private projectId: string;
-  private serviceAccount: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firebase service account is parsed from raw JSON; typed by Firebase Admin SDK not yet integrated
+  private serviceAccount: Record<string, unknown>;
 
   constructor(projectId: string, serviceAccountJson: string) {
     this.projectId = projectId;
     try {
       this.serviceAccount = JSON.parse(serviceAccountJson);
-    } catch (e) {
+    } catch {
       throw new Error('Invalid Firebase service account JSON');
     }
   }
@@ -36,7 +39,7 @@ export class FirebaseProvider implements PushNotificationProvider {
     deviceToken: string,
     title: string,
     body: string,
-    data?: Record<string, string>
+    _data?: Record<string, string>
   ): Promise<string> {
     try {
       // TODO: integrate Firebase Admin SDK when credentials are provisioned.
@@ -66,7 +69,13 @@ export class ApnsProvider implements PushNotificationProvider {
   private bundleId: string;
   private production: boolean;
 
-  constructor(keyId: string, teamId: string, privateKey: string, bundleId: string, production = false) {
+  constructor(
+    keyId: string,
+    teamId: string,
+    privateKey: string,
+    bundleId: string,
+    production = false
+  ) {
     this.keyId = keyId;
     this.teamId = teamId;
     this.privateKey = privateKey;
@@ -115,9 +124,9 @@ export class ApnsProvider implements PushNotificationProvider {
         res.on('data', (chunk) => (responseBody += chunk));
         res.on('end', () => {
           if (res.statusCode === 200) {
-            resolve(res.headers['apns-id'] as string || 'apns-ok');
+            resolve((res.headers['apns-id'] as string) || 'apns-ok');
           } else {
-            const err: any = new Error(`APNs error: ${responseBody}`);
+            const err = new Error(`APNs error: ${responseBody}`) as Error & { statusCode?: number };
             err.statusCode = res.statusCode;
             reject(err);
           }
@@ -148,20 +157,13 @@ export class OneSignalProvider implements PushNotificationProvider {
     deviceToken: string,
     title: string,
     body: string,
-    data?: Record<string, string>
+    _data?: Record<string, string>
   ): Promise<string> {
     try {
-      const payload = {
-        app_id: this.appId,
-        include_external_user_ids: [deviceToken],
-        headings: { en: title },
-        contents: { en: body },
-        data: data || {},
-        delivery_delay: 'immediate',
-        priority: 10,
-      };
-
-      // TODO: integrate OneSignal SDK when credentials are provisioned.
+      // TODO: integrate OneSignal SDK when credentials are provisioned. The
+      // request payload (app_id, include_external_user_ids, headings,
+      // contents, data, delivery_delay, priority) will be built here once
+      // the real API call replaces the mock response below.
       logger.info('OneSignal notification prepared', {
         userId: deviceToken,
         title,
@@ -180,64 +182,95 @@ export class OneSignalProvider implements PushNotificationProvider {
 /**
  * Push Notification Service Manager
  * Handles sending push notifications via multiple providers
+ *
+ * Refactored for dependency injection (Issue #1701):
+ * - Providers, defaultProvider, config, and logger can be injected
  */
+export interface PushNotificationServiceDeps {
+  providers?: Map<string, PushNotificationProvider>;
+  defaultProvider?: string;
+  config?: {
+    push: {
+      provider: string;
+      firebase: { projectId?: string; serviceAccount?: string };
+      onesignal: { appId?: string; apiKey?: string };
+    };
+    apns: { keyId?: string; teamId?: string; key?: string; bundleId?: string };
+    nodeEnv: string;
+  };
+  logger?: { info: (...a: unknown[]) => void; error: (...a: unknown[]) => void; warn: (...a: unknown[]) => void; debug: (...a: unknown[]) => void };
+}
+
 export class PushNotificationService {
   private providers: Map<string, PushNotificationProvider> = new Map();
   private defaultProvider: string;
+  private readonly log: NonNullable<PushNotificationServiceDeps['logger']>;
 
-  constructor() {
-    this.setupProviders();
-    this.defaultProvider = config.push.provider;
+  constructor(deps?: PushNotificationServiceDeps) {
+    this.log = deps?.logger ?? logger;
+    const resolvedConfig = deps?.config ?? config;
+    this.defaultProvider = deps?.defaultProvider ?? resolvedConfig.push.provider;
+
+    if (deps?.providers) {
+      this.providers = new Map(deps.providers);
+    } else {
+      this.setupProviders(resolvedConfig);
+    }
   }
 
-  private setupProviders(): void {
+  private setupProviders(resolvedConfig: NonNullable<PushNotificationServiceDeps['config']>): void {
     // Firebase provider
-    if (config.push.firebase.projectId && config.push.firebase.serviceAccount) {
+    if (resolvedConfig.push.firebase.projectId && resolvedConfig.push.firebase.serviceAccount) {
       try {
         const firebase = new FirebaseProvider(
-          config.push.firebase.projectId,
-          config.push.firebase.serviceAccount
+          resolvedConfig.push.firebase.projectId,
+          resolvedConfig.push.firebase.serviceAccount
         );
         this.providers.set('firebase', firebase);
-        logger.info('Firebase provider initialized');
+        this.log.info('Firebase provider initialized');
       } catch (error) {
-        logger.error('Failed to initialize Firebase provider', { error: String(error) });
+        this.log.error('Failed to initialize Firebase provider', { error: String(error) });
       }
     }
 
     // OneSignal provider
-    if (config.push.onesignal.appId && config.push.onesignal.apiKey) {
+    if (resolvedConfig.push.onesignal.appId && resolvedConfig.push.onesignal.apiKey) {
       try {
         const oneSignal = new OneSignalProvider(
-          config.push.onesignal.appId,
-          config.push.onesignal.apiKey
+          resolvedConfig.push.onesignal.appId,
+          resolvedConfig.push.onesignal.apiKey
         );
         this.providers.set('onesignal', oneSignal);
-        logger.info('OneSignal provider initialized');
+        this.log.info('OneSignal provider initialized');
       } catch (error) {
-        logger.error('Failed to initialize OneSignal provider', { error: String(error) });
+        this.log.error('Failed to initialize OneSignal provider', { error: String(error) });
       }
     }
 
     // APNs provider
-    if (config.apns.keyId && config.apns.teamId && config.apns.key && config.apns.bundleId) {
+    if (
+      resolvedConfig.apns.keyId &&
+      resolvedConfig.apns.teamId &&
+      resolvedConfig.apns.key &&
+      resolvedConfig.apns.bundleId
+    ) {
       try {
         const apns = new ApnsProvider(
-          config.apns.keyId,
-          config.apns.teamId,
-          config.apns.key.replace(/\\n/g, '\n'),
-          config.apns.bundleId,
-          config.nodeEnv === 'production'
+          resolvedConfig.apns.keyId,
+          resolvedConfig.apns.teamId,
+          resolvedConfig.apns.key.replace(/\\n/g, '\n'),
+          resolvedConfig.apns.bundleId,
+          resolvedConfig.nodeEnv === 'production'
         );
         this.providers.set('apns', apns);
-        logger.info('APNs provider initialized');
+        this.log.info('APNs provider initialized');
       } catch (error) {
-        logger.error('Failed to initialize APNs provider', { error: String(error) });
+        this.log.error('Failed to initialize APNs provider', { error: String(error) });
       }
     }
 
     if (this.providers.size === 0) {
-      logger.warn('No push notification providers configured');
+      this.log.warn('No push notification providers configured');
     }
   }
 
@@ -316,9 +349,10 @@ export class PushNotificationService {
         }
         try {
           await provider.send(token, title, body, data);
-        } catch (err: any) {
+        } catch (err: unknown) {
           // 410 (APNs Gone) or 404 (FCM invalid) => prune token
-          if (err.statusCode === 410 || err.statusCode === 404) {
+          const statusCode = (err as { statusCode?: number }).statusCode;
+          if (statusCode === 410 || statusCode === 404) {
             await deviceTokenService.markTokenInvalid(token);
             logger.info('Pruned invalid mobile token', { platform });
           } else {
