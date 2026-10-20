@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * E2E tests: Contribution flow
  * Covers navigating to a group detail page and interacting with contribution UI.
  */
-test.describe('Contribution flow', () => {
+test.describe('@journey Contribution flow', () => {
   test('group detail page loads without crashing', async ({ page }) => {
     await page.goto('/groups/test-group-1');
     await expect(page.locator('body')).toBeVisible();

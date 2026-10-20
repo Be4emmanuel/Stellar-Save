@@ -60,8 +60,8 @@ SKIP=0
 FAILED_FLOWS=()
 
 for flow in "$FLOWS_DIR"/*.yaml; do
-  # Skip the global config file
-  [[ "$(basename "$flow")" == "config.yaml" ]] && continue
+  # Skip configuration and shared setup flows; neither is a standalone suite.
+  [[ "$(basename "$flow")" == "config.yaml" || "$(basename "$flow")" == "setup.yaml" ]] && continue
 
   if [[ -n "${QUARANTINED[$flow]+_}" ]]; then
     echo "⏭  SKIPPED (quarantined): $(basename "$flow")"

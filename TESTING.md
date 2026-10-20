@@ -222,6 +222,22 @@ npm run test:coverage
 | `src/test/e2e-testnet/` | Testnet E2E tests (real SDK, real network) |
 | `src/__mocks__/@stellar/` | Shared Vitest manual mocks |
 
+### E2E suites
+
+Every frontend E2E test is assigned exactly one title tag:
+
+| Tag | Purpose | Command |
+|-----|---------|---------|
+| `@smoke` | Fast, local critical-path checks; no real-chain dependency | `npm run test:e2e` |
+| `@journey` | Full browser flows against the local app and standalone network | `npm run test:e2e:journey` |
+| `@testnet` | Tests that require a live service or Stellar testnet | `npm run test:e2e:testnet` |
+
+`test:e2e` runs only tagged smoke tests. `test:e2e:journey` runs the tagged
+Playwright browser flows. `test:e2e:testnet` runs the on-chain test runner and
+requires `.env.testnet` credentials and a deployed contract. Tests in
+`src/test/integration/` are Vitest integration tests, not E2E tests; they remain
+available through the regular `npm test run` command.
+
 ### Writing Tests
 
 ```typescript
@@ -418,5 +434,4 @@ cargo mutants --file src/penalty.rs --file src/pool.rs
 # Show caught mutants (for debugging)
 cargo mutants --caught
 ```
-
 

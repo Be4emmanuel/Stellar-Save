@@ -18,7 +18,7 @@ import {
   xdr,
   Address,
 } from '@stellar/stellar-sdk';
-import * as freighterApi from '@stellar/freighter-api';
+
 import { env } from './env';
 import { rpcServer } from './rpcClient';
 
