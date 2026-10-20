@@ -7,6 +7,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { ContributeButton } from '../../components/ContributeButton';
 
 const WALLET_ADDRESS = 'GTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -15,12 +16,7 @@ function renderContributeButton(
   props: Partial<React.ComponentProps<typeof ContributeButton>> = {}
 ) {
   return render(
-    <ContributeButton
-      amount={100}
-      cycleId={3}
-      walletAddress={WALLET_ADDRESS}
-      {...props}
-    />
+    <ContributeButton amount={100} cycleId={3} walletAddress={WALLET_ADDRESS} {...props} />
   );
 }
 

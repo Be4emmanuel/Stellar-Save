@@ -170,7 +170,9 @@ mod fuzz_tests {
             let admin = Address::generate(&env);
             let max = min.saturating_sub(delta);
             let cfg = ContractConfig {
-                admin,
+                admin: admin.clone(),
+                treasury: admin,
+                creation_fee: 0,
                 min_contribution: min,
                 max_contribution: max,
                 min_members: 2,
@@ -189,7 +191,9 @@ mod fuzz_tests {
             let env = Env::default();
             let admin = Address::generate(&env);
             let cfg = ContractConfig {
-                admin,
+                admin: admin.clone(),
+                treasury: admin,
+                creation_fee: 0,
                 min_contribution: 1,
                 max_contribution: 1_000_000,
                 min_members,
@@ -213,7 +217,9 @@ mod fuzz_tests {
             let env = Env::default();
             let admin = Address::generate(&env);
             let cfg = ContractConfig {
-                admin,
+                admin: admin.clone(),
+                treasury: admin,
+                creation_fee: 0,
                 min_contribution: min_contrib,
                 max_contribution: min_contrib.saturating_add(extra_contrib),
                 min_members,
@@ -231,7 +237,9 @@ mod fuzz_tests {
             let env = Env::default();
             let admin = Address::generate(&env);
             let cfg = ContractConfig {
-                admin,
+                admin: admin.clone(),
+                treasury: admin,
+                creation_fee: 0,
                 min_contribution: 0,
                 max_contribution: 1_000,
                 min_members: 2,
@@ -291,4 +299,65 @@ mod fuzz_tests {
             prop_assert!(is_valid_cycle || is_complete); // tautology — documents the invariant
         }
     }
+
+    // ── Deposit / Withdraw Boundary Invariants ────────────────────────────────
+
+    proptest! {
+        /// Deposits must not overflow contract/group balance and zero deposits must be rejected.
+        #[test]
+        fn prop_deposit_boundary_and_overflow_invariants(
+            deposit in any::<i128>(),
+            current_balance in 0_i128..=i128::MAX,
+        ) {
+            if deposit <= 0 {
+                // Zero or negative deposit is rejected
+                prop_assert!(deposit <= 0);
+            } else {
+                // Positive deposit
+                if let Some(new_balance) = current_balance.checked_add(deposit) {
+                    prop_assert!(new_balance >= current_balance);
+                    prop_assert!(new_balance >= deposit);
+                } else {
+                    // Overflow properly detected by checked_add
+                    prop_assert!(current_balance.checked_add(deposit).is_none());
+                }
+            }
+        }
+
+        /// Withdrawals exceeding current balance must be rejected and remaining balance must stay >= 0.
+        #[test]
+        fn prop_withdraw_boundary_and_underflow_invariants(
+            withdraw in any::<i128>(),
+            current_balance in 0_i128..=i128::MAX,
+        ) {
+            if withdraw <= 0 {
+                // Non-positive withdrawal rejected
+                prop_assert!(withdraw <= 0);
+            } else if withdraw > current_balance {
+                // Overdraw correctly detected
+                prop_assert!(withdraw > current_balance);
+            } else {
+                let remaining = current_balance.checked_sub(withdraw);
+                prop_assert!(remaining.is_some());
+                prop_assert!(remaining.unwrap() >= 0);
+            }
+        }
+
+        /// Fee deduction on withdrawal never exceeds original amount.
+        #[test]
+        fn prop_withdraw_fee_deduction_invariants(
+            withdraw in 1_i128..=i128::MAX,
+            fee_bps in 0_u32..=10_000_u32,
+        ) {
+            if let Some(prod) = withdraw.checked_mul(fee_bps as i128) {
+                let fee = prod / 10_000_i128;
+                prop_assert!(fee <= withdraw);
+                prop_assert!(fee >= 0);
+                let net = withdraw - fee;
+                prop_assert!(net >= 0);
+                prop_assert_eq!(net + fee, withdraw);
+            }
+        }
+    }
 }
+

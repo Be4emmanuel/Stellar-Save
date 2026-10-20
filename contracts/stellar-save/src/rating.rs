@@ -4,15 +4,13 @@
 //! reaches a terminal state (Completed or Cancelled).
 //!
 //! ## Storage layout
-//! - `GroupKey::Rating(group_id, member)` → `RatingEntry`  (per-member rating)
-//! - `GroupKey::RatingAggregate(group_id)` → `RatingAggregate` (running totals)
+//! - `StorageKey::GrpRate(group_id, member)` → `RatingEntry`  (per-member rating)
+//! - `StorageKey::GrpRateA(group_id)` → `RatingAggregate` (running totals)
 
 use soroban_sdk::{contracttype, Address, Env, String};
 
 use crate::{
-    error::StellarSaveError,
-    events::EventEmitter,
-    group::Group,
+    auth::is_active_member, error::StellarSaveError, events::EventEmitter, group::Group,
     storage::StorageKeyBuilder,
 };
 
@@ -99,8 +97,7 @@ pub fn rate_group(
     }
 
     // 3. Caller must be a member
-    let profile_key = StorageKeyBuilder::member_profile(group_id, caller.clone());
-    if !env.storage().persistent().has(&profile_key) {
+    if !is_active_member(env, group_id, &caller) {
         return Err(StellarSaveError::NotMember);
     }
 

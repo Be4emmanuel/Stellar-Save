@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  isValidPositiveNumber,
+  isValidNumberInRange,
+  isValidStringLength,
+  commonValidators,
+} from '../lib/validation';
 
 /**
  * Zod validation schema for group creation
@@ -17,9 +23,13 @@ const GROUP_DESCRIPTION_MAX = 500;
 const MIN_CONTRIBUTION_XLM = 0.1; // 0.1 XLM
 const MAX_CONTRIBUTION_XLM = 1_000_000; // 1M XLM
 
-// Member count constraints (must match contract minimums)
+// Member count constraints.
+// MAX_MEMBERS_LIMIT must stay ≤ the backend `memberCount` schema cap (20) defined in
+// backend/src/lib/validation.ts. The smart contract is the ultimate source of truth;
+// the backend enforces this limit at the API boundary, so the frontend must not
+// allow a value the API would reject.
 const MIN_MEMBERS = 2;
-const MAX_MEMBERS_LIMIT = 100;
+const MAX_MEMBERS_LIMIT = 20;
 
 // Cycle duration options (in seconds)
 const VALID_CYCLE_DURATIONS = [604800, 1209600, 2592000]; // 1 week, 2 weeks, 1 month
@@ -30,72 +40,52 @@ const VALID_CYCLE_DURATIONS = [604800, 1209600, 2592000]; // 1 week, 2 weeks, 1 
 export const createGroupFormSchema = z.object({
   name: z
     .string()
-    .min(GROUP_NAME_MIN, `Group name must be at least ${GROUP_NAME_MIN} characters`)
-    .max(GROUP_NAME_MAX, `Group name must be no more than ${GROUP_NAME_MAX} characters`)
-    .trim(),
+    .trim()
+    .refine(
+      (val) => isValidStringLength(val, GROUP_NAME_MIN, GROUP_NAME_MAX),
+      `Group name must be between ${GROUP_NAME_MIN} and ${GROUP_NAME_MAX} characters`
+    ),
 
-  description: z
-    .string()
-    .min(1, 'Description is required')
-    .max(GROUP_DESCRIPTION_MAX, `Description must be no more than ${GROUP_DESCRIPTION_MAX} characters`)
-    .trim(),
+  description: commonValidators.nonEmptyString(GROUP_DESCRIPTION_MAX, 'Description'),
 
-  imageUrl: z
-    .string()
-    .url('Image URL must be a valid URL')
-    .optional()
-    .or(z.literal('')),
+  imageUrl: commonValidators.url,
 
   contributionAmount: z
     .string()
+    .refine(isValidPositiveNumber, 'Contribution amount must be a positive number')
     .refine(
-      (val) => {
-        const num = parseFloat(val);
-        return !isNaN(num) && num > 0;
-      },
-      'Contribution amount must be a positive number',
-    )
-    .refine(
-      (val) => {
-        const num = parseFloat(val);
-        return num >= MIN_CONTRIBUTION_XLM;
-      },
-      `Contribution amount must be at least ${MIN_CONTRIBUTION_XLM} XLM`,
-    )
-    .refine(
-      (val) => {
-        const num = parseFloat(val);
-        return num <= MAX_CONTRIBUTION_XLM;
-      },
-      `Contribution amount must not exceed ${MAX_CONTRIBUTION_XLM} XLM`,
+      (val) => isValidNumberInRange(val, MIN_CONTRIBUTION_XLM, MAX_CONTRIBUTION_XLM),
+      `Contribution amount must be between ${MIN_CONTRIBUTION_XLM} and ${MAX_CONTRIBUTION_XLM} XLM`
     ),
 
   cycleDuration: z
     .string()
     .refine(
       (val) => VALID_CYCLE_DURATIONS.includes(parseInt(val, 10)),
-      'Please select a valid cycle duration',
+      'Please select a valid cycle duration'
     ),
 
   maxMembers: z
     .string()
     .refine(
-      (val) => {
-        const num = parseInt(val, 10);
-        return !isNaN(num) && num >= MIN_MEMBERS && num <= MAX_MEMBERS_LIMIT;
-      },
-      `Maximum members must be between ${MIN_MEMBERS} and ${MAX_MEMBERS_LIMIT}`,
+      (val) => isValidNumberInRange(val, MIN_MEMBERS, MAX_MEMBERS_LIMIT),
+      `Maximum members must be between ${MIN_MEMBERS} and ${MAX_MEMBERS_LIMIT}`
     ),
 
-  minMembers: z
+  minMembers: z.string().refine((val) => {
+    const num = parseInt(val, 10);
+    return !isNaN(num) && num >= MIN_MEMBERS;
+  }, `Minimum members must be at least ${MIN_MEMBERS}`),
+
+  // Insurance pool (Issue #1012)
+  insuranceEnabled: z.boolean().default(false),
+  insurancePremiumRate: z
     .string()
-    .refine(
-      (val) => {
-        const num = parseInt(val, 10);
-        return !isNaN(num) && num >= MIN_MEMBERS;
-      },
-      `Minimum members must be at least ${MIN_MEMBERS}`,
-    ),
+    .optional()
+    .refine((val) => {
+      if (!val) return true;
+      return isValidNumberInRange(val, 0, 100);
+    }, 'Premium must be between 0 and 100 %'),
 });
 
 /**
@@ -112,14 +102,11 @@ export const groupDataSchema = z.object({
     .positive('Contribution amount must be positive')
     .refine(
       (val) => val <= MAX_CONTRIBUTION_XLM * STROOPS_PER_XLM,
-      'Contribution amount too large',
+      'Contribution amount too large'
     ),
   cycle_duration: z
     .number()
-    .refine(
-      (val) => VALID_CYCLE_DURATIONS.includes(val),
-      'Invalid cycle duration',
-    ),
+    .refine((val) => VALID_CYCLE_DURATIONS.includes(val), 'Invalid cycle duration'),
   max_members: z
     .number()
     .int()
@@ -130,6 +117,8 @@ export const groupDataSchema = z.object({
     .int()
     .min(MIN_MEMBERS, `Minimum members must be at least ${MIN_MEMBERS}`)
     .default(MIN_MEMBERS),
+  insuranceEnabled: z.boolean().default(false),
+  insurancePremiumRate: z.number().min(0).max(100).default(5),
 });
 
 export type CreateGroupFormData = z.infer<typeof createGroupFormSchema>;
@@ -141,10 +130,7 @@ export type GroupData = z.infer<typeof groupDataSchema>;
 export const fieldValidators = {
   name: (value: string) => {
     try {
-      z.string()
-        .min(GROUP_NAME_MIN)
-        .max(GROUP_NAME_MAX)
-        .parse(value);
+      createGroupFormSchema.shape.name.parse(value);
       return null;
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -156,10 +142,7 @@ export const fieldValidators = {
 
   description: (value: string) => {
     try {
-      z.string()
-        .min(1)
-        .max(GROUP_DESCRIPTION_MAX)
-        .parse(value);
+      createGroupFormSchema.shape.description.parse(value);
       return null;
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -223,7 +206,7 @@ export const fieldValidators = {
  */
 export function validateFormStep(
   step: number,
-  data: Record<string, string> | Partial<Record<string, string>>,
+  data: Record<string, string> | Partial<Record<string, string>>
 ): Record<string, string> {
   const errors: Record<string, string> = {};
 
@@ -270,11 +253,15 @@ export function validateFormStep(
  * Validate and convert form data to contract-ready format
  */
 export function validateAndTransformFormData(
-  formData: Record<string, string>,
+  formData: Record<string, string | boolean>
 ): { success: false; errors: Record<string, string> } | { success: true; data: GroupData } {
   try {
+    const stringData = Object.fromEntries(
+      Object.entries(formData).filter(([, v]) => typeof v === 'string')
+    ) as Record<string, string>;
+
     // First validate raw form data
-    const validated = createGroupFormSchema.parse(formData);
+    const validated = createGroupFormSchema.parse(stringData);
 
     // Then transform to GroupData format
     const contribution = Math.round(parseFloat(validated.contributionAmount) * STROOPS_PER_XLM);
@@ -287,6 +274,10 @@ export function validateAndTransformFormData(
       cycle_duration: parseInt(validated.cycleDuration, 10),
       max_members: parseInt(validated.maxMembers, 10),
       min_members: parseInt(validated.minMembers, 10),
+      insuranceEnabled: Boolean(formData['insuranceEnabled']),
+      insurancePremiumRate: formData['insurancePremiumRate']
+        ? parseFloat(String(formData['insurancePremiumRate']))
+        : 5,
     };
 
     // Validate final format

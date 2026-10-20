@@ -1,6 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { GroupList, Group } from '../components/GroupList';
+import { describe, it, expect, vi } from 'vitest';
+
+import { GroupList } from '../components/GroupList';
+
+import type { Group } from '../components/GroupList';
 
 const mockGroups: Group[] = [
   {
@@ -29,7 +32,7 @@ const mockGroups: Group[] = [
 describe('GroupList', () => {
   it('renders groups correctly', () => {
     render(<GroupList groups={mockGroups} />);
-    
+
     expect(screen.getByText('Alpha Group')).toBeInTheDocument();
     expect(screen.getByText('Beta Group')).toBeInTheDocument();
     expect(screen.getByText('Gamma Group')).toBeInTheDocument();
@@ -37,47 +40,39 @@ describe('GroupList', () => {
 
   it('shows loading state', () => {
     render(<GroupList groups={[]} loading={true} />);
-    
+
     const loadingItems = document.querySelectorAll('.group-list-loading .group-list-item');
     expect(loadingItems.length).toBeGreaterThan(0);
   });
 
   it('shows empty state when no groups', () => {
     render(
-      <GroupList
-        groups={[]}
-        emptyTitle="No groups"
-        emptyDescription="Create your first group"
-      />
+      <GroupList groups={[]} emptyTitle="No groups" emptyDescription="Create your first group" />
     );
-    
+
     expect(screen.getByText('No groups')).toBeInTheDocument();
     expect(screen.getByText('Create your first group')).toBeInTheDocument();
   });
 
   it('calls onEmptyAction when empty action button is clicked', () => {
     const handleEmptyAction = vi.fn();
-    
+
     render(
-      <GroupList
-        groups={[]}
-        emptyActionLabel="Create Group"
-        onEmptyAction={handleEmptyAction}
-      />
+      <GroupList groups={[]} emptyActionLabel="Create Group" onEmptyAction={handleEmptyAction} />
     );
-    
+
     const actionButton = screen.getByText('Create Group');
     fireEvent.click(actionButton);
-    
+
     expect(handleEmptyAction).toHaveBeenCalledTimes(1);
   });
 
   it('filters groups based on search query', async () => {
     render(<GroupList groups={mockGroups} />);
-    
+
     const searchInput = screen.getByPlaceholderText('Search groups...');
     fireEvent.change(searchInput, { target: { value: 'Alpha' } });
-    
+
     await waitFor(() => {
       expect(screen.getByText('Alpha Group')).toBeInTheDocument();
       expect(screen.queryByText('Beta Group')).not.toBeInTheDocument();
@@ -87,14 +82,14 @@ describe('GroupList', () => {
 
   it('calls onGroupClick when a group is clicked', () => {
     const handleGroupClick = vi.fn();
-    
+
     render(<GroupList groups={mockGroups} onGroupClick={handleGroupClick} />);
-    
+
     const firstGroup = screen.getByText('Alpha Group').closest('.card');
     if (firstGroup) {
       fireEvent.click(firstGroup);
     }
-    
+
     expect(handleGroupClick).toHaveBeenCalledWith(mockGroups[0]);
   });
 
@@ -105,35 +100,35 @@ describe('GroupList', () => {
       description: `Description ${i + 1}`,
       memberCount: i + 1,
     }));
-    
+
     render(<GroupList groups={manyGroups} pageSize={10} />);
-    
+
     expect(screen.getByText('Group 01')).toBeInTheDocument();
     expect(screen.getByText('Group 10')).toBeInTheDocument();
     expect(screen.queryByText('Group 11')).not.toBeInTheDocument();
-    
+
     const page2Button = screen.getByLabelText('Page 2');
     fireEvent.click(page2Button);
-    
+
     expect(screen.getByText('Group 11')).toBeInTheDocument();
     expect(screen.queryByText('Group 01')).not.toBeInTheDocument();
   });
 
   it('hides search when showSearch is false', () => {
     render(<GroupList groups={mockGroups} showSearch={false} />);
-    
+
     expect(screen.queryByPlaceholderText('Search groups...')).not.toBeInTheDocument();
   });
 
   it('hides sort when showSort is false', () => {
     render(<GroupList groups={mockGroups} showSort={false} />);
-    
+
     expect(screen.queryByText(/Sort:/)).not.toBeInTheDocument();
   });
 
   it('hides pagination when showPagination is false', () => {
     render(<GroupList groups={mockGroups} showPagination={false} />);
-    
+
     expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
   });
 
@@ -143,9 +138,9 @@ describe('GroupList', () => {
         Custom: {group.name}
       </div>
     );
-    
+
     render(<GroupList groups={mockGroups} renderGroupItem={customRender} />);
-    
+
     const customItems = screen.getAllByTestId('custom-group');
     expect(customItems).toHaveLength(3);
     expect(screen.getByText('Custom: Alpha Group')).toBeInTheDocument();
@@ -153,7 +148,7 @@ describe('GroupList', () => {
 
   it('displays member count correctly', () => {
     render(<GroupList groups={mockGroups} />);
-    
+
     expect(screen.getByText('10 members')).toBeInTheDocument();
     expect(screen.getByText('25 members')).toBeInTheDocument();
     expect(screen.getByText('5 members')).toBeInTheDocument();
@@ -167,15 +162,15 @@ describe('GroupList', () => {
         memberCount: 1,
       },
     ];
-    
+
     render(<GroupList groups={singleMemberGroup} />);
-    
+
     expect(screen.getByText('1 member')).toBeInTheDocument();
   });
 
   it('displays avatar placeholder when no avatar provided', () => {
     render(<GroupList groups={mockGroups} />);
-    
+
     const placeholders = document.querySelectorAll('.group-list-item-avatar-placeholder');
     expect(placeholders.length).toBeGreaterThan(0);
     expect(placeholders[0].textContent).toBe('A'); // First letter of "Alpha Group"

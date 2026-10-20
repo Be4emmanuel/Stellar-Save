@@ -1,29 +1,32 @@
-import { useState } from "react";
-import { Button } from "./Button";
-import { Input } from "./Input";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useState } from 'react';
+
+import { Button } from './Button';
+import { Input } from './Input';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import {
   validateFormStep,
   validateAndTransformFormData,
   VALIDATION_CONSTANTS,
-} from "../schemas/groupSchema";
-import type { GroupData } from "../utils/groupApi";
-import "./CreateGroupForm.css";
+} from '../schemas/groupSchema';
+
+import type { GroupData } from '../utils/groupApi';
+import './CreateGroupForm.css';
 
 export const CYCLE_DURATION_OPTIONS = [
-  { value: "604800", label: "Weekly" },
-  { value: "1209600", label: "Bi-Weekly" },
-  { value: "2592000", label: "Monthly" },
+  { value: '604800', label: 'Weekly' },
+  { value: '1209600', label: 'Bi-Weekly' },
+  { value: '2592000', label: 'Monthly' },
 ] as const;
 
 const STEPS = [
-  { label: "Basics" },
-  { label: "Finances" },
-  { label: "Members" },
-  { label: "Review" },
+  { label: 'Basics' },
+  { label: 'Finances' },
+  { label: 'Members' },
+  { label: 'Insurance' },
+  { label: 'Review' },
 ] as const;
 
-const DRAFT_KEY = "create-group-draft";
+const DRAFT_KEY = 'create-group-draft';
 
 interface FormData {
   name: string;
@@ -33,16 +36,20 @@ interface FormData {
   cycleDuration: string;
   maxMembers: string;
   minMembers: string;
+  insuranceEnabled: boolean;
+  insurancePremiumRate: string;
 }
 
 const EMPTY_FORM: FormData = {
-  name: "",
-  description: "",
-  imageUrl: "",
-  contributionAmount: "",
-  cycleDuration: "",
-  maxMembers: "",
-  minMembers: "2",
+  name: '',
+  description: '',
+  imageUrl: '',
+  contributionAmount: '',
+  cycleDuration: '',
+  maxMembers: '',
+  minMembers: '2',
+  insuranceEnabled: false,
+  insurancePremiumRate: '5',
 };
 
 type FormErrors = Record<string, string | undefined>;
@@ -65,14 +72,25 @@ export function CreateGroupForm({
   const [draft, setDraft] = useLocalStorage<FormData>(DRAFT_KEY, EMPTY_FORM);
   const [formData, setFormData] = useState<FormData>(draft);
 
-  const updateField = (field: keyof FormData, value: string) => {
+  const updateField = (field: keyof FormData, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
     setDraftSaved(false);
   };
 
   const runValidateStep = (currentStep: number): boolean => {
-    // Use Zod schema validation for the current step
+    if (currentStep === 4) {
+      // Insurance step: validate premium only when enabled
+      const newErrors: FormErrors = {};
+      if (formData.insuranceEnabled && formData.insurancePremiumRate) {
+        const rate = parseFloat(formData.insurancePremiumRate);
+        if (isNaN(rate) || rate < 0 || rate > 100) {
+          newErrors['insurancePremiumRate'] = 'Premium must be between 0 and 100 %';
+        }
+      }
+      setErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
+    }
     const formDataRecord = formData as unknown as Record<string, string>;
     const newErrors = validateFormStep(currentStep, formDataRecord);
     setErrors(newErrors);
@@ -100,8 +118,7 @@ export function CreateGroupForm({
 
   const handleSubmit = () => {
     if (runValidateStep(3)) {
-      // Validate and transform form data using Zod schema
-      const formDataRecord: Record<string, string> = {
+      const formDataRecord: Record<string, string | boolean> = {
         name: formData.name,
         description: formData.description,
         imageUrl: formData.imageUrl,
@@ -109,6 +126,8 @@ export function CreateGroupForm({
         cycleDuration: formData.cycleDuration,
         maxMembers: formData.maxMembers,
         minMembers: formData.minMembers,
+        insuranceEnabled: formData.insuranceEnabled,
+        insurancePremiumRate: formData.insurancePremiumRate,
       };
 
       const result = validateAndTransformFormData(formDataRecord);
@@ -118,13 +137,13 @@ export function CreateGroupForm({
         return;
       }
 
-      setDraft(EMPTY_FORM); // clear draft on successful submit
+      setDraft(EMPTY_FORM);
       onSubmit(result.data);
     }
   };
 
-  const hasDraft =
-    JSON.stringify(formData) !== JSON.stringify(EMPTY_FORM);
+  const hasDraft = JSON.stringify(formData) !== JSON.stringify(EMPTY_FORM);
+  const TOTAL_STEPS = STEPS.length;
 
   return (
     <div className="create-group-form">
@@ -132,12 +151,11 @@ export function CreateGroupForm({
       <nav aria-label="Form progress" className="wizard-steps">
         {STEPS.map((s, i) => {
           const stepNum = i + 1;
-          const state =
-            stepNum < step ? "completed" : stepNum === step ? "current" : "upcoming";
+          const state = stepNum < step ? 'completed' : stepNum === step ? 'current' : 'upcoming';
           return (
             <div key={s.label} className={`wizard-step wizard-step--${state}`}>
               <span className="wizard-step__number" aria-hidden="true">
-                {stepNum < step ? "✓" : stepNum}
+                {stepNum < step ? '✓' : stepNum}
               </span>
               <span className="wizard-step__label">{s.label}</span>
             </div>
@@ -146,7 +164,7 @@ export function CreateGroupForm({
       </nav>
 
       <p className="form-step-label" aria-live="polite">
-        Step {step} of {STEPS.length} — {STEPS[step - 1].label}
+        Step {step} of {TOTAL_STEPS} — {STEPS[step - 1].label}
       </p>
 
       {/* Step 1: Basic Information */}
@@ -156,18 +174,18 @@ export function CreateGroupForm({
           <Input
             label="Group Name"
             value={formData.name}
-            onChange={(e) => updateField("name", e.target.value)}
-            error={errors.name}
+            onChange={(e) => updateField('name', e.target.value)}
+            error={errors['name']}
             required
             aria-required="true"
             disabled={isSubmitting}
-            helperText={`Name should be 3-${VALIDATION_CONSTANTS.GROUP_NAME_MAX} characters (e.g. "Family Savings Circle")`}
+            helperText={`Name should be 3–${VALIDATION_CONSTANTS.GROUP_NAME_MAX} characters (e.g. "Family Savings Circle")`}
           />
           <Input
             label="Description"
             value={formData.description}
-            onChange={(e) => updateField("description", e.target.value)}
-            error={errors.description}
+            onChange={(e) => updateField('description', e.target.value)}
+            error={errors['description']}
             required
             aria-required="true"
             disabled={isSubmitting}
@@ -177,9 +195,9 @@ export function CreateGroupForm({
             label="Image URL (Optional)"
             type="url"
             value={formData.imageUrl}
-            onChange={(e) => updateField("imageUrl", e.target.value)}
-            error={errors.imageUrl}
-            helperText="Link to a group avatar image for visual identification"
+            onChange={(e) => updateField('imageUrl', e.target.value)}
+            error={errors['imageUrl']}
+            helperText="URL to a group image for visual identification"
             disabled={isSubmitting}
           />
         </div>
@@ -193,9 +211,9 @@ export function CreateGroupForm({
             label="Contribution Amount (XLM)"
             type="number"
             value={formData.contributionAmount}
-            onChange={(e) => updateField("contributionAmount", e.target.value)}
-            error={errors.contributionAmount}
-            helperText={`Each member contributes per cycle — between ${VALIDATION_CONSTANTS.MIN_CONTRIBUTION_XLM} and ${VALIDATION_CONSTANTS.MAX_CONTRIBUTION_XLM} XLM`}
+            onChange={(e) => updateField('contributionAmount', e.target.value)}
+            error={errors['contributionAmount']}
+            helperText={`Amount each member contributes per cycle — between ${VALIDATION_CONSTANTS.MIN_CONTRIBUTION_XLM} and ${VALIDATION_CONSTANTS.MAX_CONTRIBUTION_XLM} XLM (e.g. 100 XLM)`}
             required
             aria-required="true"
             disabled={isSubmitting}
@@ -205,18 +223,16 @@ export function CreateGroupForm({
               Cycle Duration <span aria-hidden="true">*</span>
             </label>
             <p className="input-helper">
-              How often contributions are collected — weekly works well for small groups, monthly for larger ones
+              How often contributions are collected — weekly works well for small groups, monthly
+              for larger ones
             </p>
             <select
               id="cycleDuration"
-              className={`cycle-select${errors.cycleDuration ? " cycle-select--error" : ""}`}
+              className={`cycle-select${errors['cycleDuration'] ? ' cycle-select--error' : ''}`}
               value={formData.cycleDuration}
-              onChange={(e) => updateField("cycleDuration", e.target.value)}
+              onChange={(e) => updateField('cycleDuration', e.target.value)}
               aria-required="true"
-              aria-invalid={errors.cycleDuration ? "true" : undefined}
-              aria-describedby={
-                errors.cycleDuration ? "cycleDuration-error" : "cycleDuration-hint"
-              }
+              aria-invalid={errors['cycleDuration'] ? 'true' : undefined}
               disabled={isSubmitting}
             >
               <option value="">Select cycle duration</option>
@@ -226,13 +242,9 @@ export function CreateGroupForm({
                 </option>
               ))}
             </select>
-            {errors.cycleDuration && (
-              <span
-                id="cycleDuration-error"
-                className="input-error"
-                role="alert"
-              >
-                {errors.cycleDuration}
+            {errors['cycleDuration'] && (
+              <span className="input-error" role="alert">
+                {errors['cycleDuration']}
               </span>
             )}
           </div>
@@ -247,9 +259,9 @@ export function CreateGroupForm({
             label="Maximum Members"
             type="number"
             value={formData.maxMembers}
-            onChange={(e) => updateField("maxMembers", e.target.value)}
-            error={errors.maxMembers}
-            helperText={`Maximum number of group members (${VALIDATION_CONSTANTS.MIN_MEMBERS}-${VALIDATION_CONSTANTS.MAX_MEMBERS_LIMIT})`}
+            onChange={(e) => updateField('maxMembers', e.target.value)}
+            error={errors['maxMembers']}
+            helperText={`Maximum number of group members (${VALIDATION_CONSTANTS.MIN_MEMBERS}–${VALIDATION_CONSTANTS.MAX_MEMBERS_LIMIT})`}
             required
             aria-required="true"
             disabled={isSubmitting}
@@ -258,8 +270,8 @@ export function CreateGroupForm({
             label="Minimum Members"
             type="number"
             value={formData.minMembers}
-            onChange={(e) => updateField("minMembers", e.target.value)}
-            error={errors.minMembers}
+            onChange={(e) => updateField('minMembers', e.target.value)}
+            error={errors['minMembers']}
             helperText={`Minimum members needed to start first cycle (at least ${VALIDATION_CONSTANTS.MIN_MEMBERS})`}
             required
             aria-required="true"
@@ -268,8 +280,73 @@ export function CreateGroupForm({
         </div>
       )}
 
-      {/* Step 4: Review */}
+      {/* Step 4: Insurance Pool */}
       {step === 4 && (
+        <div className="form-step">
+          <h2>Insurance Pool</h2>
+          <p className="form-step-description">
+            An insurance pool protects members if someone misses a contribution. A small premium (%
+            of each contribution) is collected into the pool. Claims can be made by members in
+            hardship situations.
+          </p>
+
+          <div className="insurance-toggle-row">
+            <label className="insurance-toggle-label" htmlFor="insuranceEnabled">
+              Enable insurance pool for this group
+            </label>
+            <input
+              id="insuranceEnabled"
+              type="checkbox"
+              className="insurance-toggle"
+              checked={formData.insuranceEnabled}
+              onChange={(e) => updateField('insuranceEnabled', e.target.checked)}
+              disabled={isSubmitting}
+              aria-describedby="insurance-hint"
+            />
+          </div>
+          <p id="insurance-hint" className="input-helper">
+            Members will be informed of the premium cost before joining.
+          </p>
+
+          {formData.insuranceEnabled && (
+            <Input
+              label="Premium Rate (%)"
+              type="number"
+              value={formData.insurancePremiumRate}
+              onChange={(e) => updateField('insurancePremiumRate', e.target.value)}
+              error={errors['insurancePremiumRate']}
+              helperText="Percentage of each contribution collected into the insurance pool (0–100 %). Typical: 3–10 %."
+              disabled={isSubmitting}
+            />
+          )}
+
+          {formData.insuranceEnabled && (
+            <div className="insurance-cost-preview" aria-live="polite">
+              {formData.contributionAmount && formData.insurancePremiumRate ? (
+                <p>
+                  At a <strong>{formData.insurancePremiumRate}%</strong> premium on a{' '}
+                  <strong>{formData.contributionAmount} XLM</strong> contribution, each member pays
+                  an extra{' '}
+                  <strong>
+                    {(
+                      (parseFloat(formData.contributionAmount) *
+                        parseFloat(formData.insurancePremiumRate)) /
+                      100
+                    ).toFixed(4)}{' '}
+                    XLM
+                  </strong>{' '}
+                  per cycle into the insurance pool.
+                </p>
+              ) : (
+                <p>Enter a contribution amount (Step 2) to see the per-cycle cost.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 5: Review */}
+      {step === 5 && (
         <div className="form-step">
           <h2>Review &amp; Confirm</h2>
           <div className="review-section">
@@ -294,9 +371,8 @@ export function CreateGroupForm({
             <div className="review-item">
               <span className="review-label">Cycle Duration:</span>
               <span>
-                {CYCLE_DURATION_OPTIONS.find(
-                  (o) => o.value === formData.cycleDuration,
-                )?.label ?? formData.cycleDuration}
+                {CYCLE_DURATION_OPTIONS.find((o) => o.value === formData.cycleDuration)?.label ??
+                  formData.cycleDuration}
               </span>
             </div>
             <div className="review-item">
@@ -307,13 +383,20 @@ export function CreateGroupForm({
               <span className="review-label">Minimum Members:</span>
               <span>{formData.minMembers}</span>
             </div>
+            <div className="review-item">
+              <span className="review-label">Insurance Pool:</span>
+              <span>
+                {formData.insuranceEnabled
+                  ? `Enabled — ${formData.insurancePremiumRate}% premium per cycle`
+                  : 'Disabled'}
+              </span>
+            </div>
           </div>
         </div>
       )}
 
       <div className="form-actions">
-        {/* Draft controls */}
-        {hasDraft && step < 4 && (
+        {hasDraft && step < TOTAL_STEPS && (
           <Button
             variant="ghost"
             size="sm"
@@ -321,7 +404,7 @@ export function CreateGroupForm({
             disabled={isSubmitting}
             aria-label="Save draft"
           >
-            {draftSaved ? "Draft saved ✓" : "Save Draft"}
+            {draftSaved ? 'Draft saved ✓' : 'Save Draft'}
           </Button>
         )}
         {hasDraft && step === 1 && (
@@ -335,13 +418,8 @@ export function CreateGroupForm({
             Discard Draft
           </Button>
         )}
-
         {step > 1 && (
-          <Button
-            variant="secondary"
-            onClick={handleBack}
-            disabled={isSubmitting}
-          >
+          <Button variant="secondary" onClick={handleBack} disabled={isSubmitting}>
             Back
           </Button>
         )}
@@ -350,7 +428,7 @@ export function CreateGroupForm({
             Cancel
           </Button>
         )}
-        {step < 4 ? (
+        {step < TOTAL_STEPS ? (
           <Button onClick={handleNext} disabled={isSubmitting}>
             Next
           </Button>

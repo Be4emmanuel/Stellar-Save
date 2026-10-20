@@ -1,6 +1,7 @@
 import { Box, Card, CardContent, Typography, Skeleton } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { AppLayout } from '../ui';
+import { ErrorState } from '../components/ErrorState';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useGroupAnalytics } from '../hooks/useGroupAnalytics';
 
@@ -11,9 +12,7 @@ export default function GroupAnalytics() {
   if (error) {
     return (
       <AppLayout title="Group Analytics" subtitle={`Analytics for group: ${groupId}`}>
-        <Box sx={{ p: 3 }}>
-          <Typography color="error">Error loading analytics: {error}</Typography>
-        </Box>
+        <ErrorState message={`Error loading analytics: ${error}`} />
       </AppLayout>
     );
   }
@@ -21,7 +20,7 @@ export default function GroupAnalytics() {
   return (
     <AppLayout title="Group Analytics" subtitle={`Analytics for group: ${groupId}`}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        
+
         {/* Stats Row */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
           <Card variant="outlined">

@@ -5,9 +5,9 @@
 
 .reminder-section {
   padding: 1rem;
-  background-color: var(--color-bg-secondary, #f9fafb);
+  background-color: var(--color-bg-secondary);
   border-radius: 0.5rem;
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
 }
 
 /* ── Timing Options ────────────────────────────────────────── */
@@ -23,27 +23,27 @@
   align-items: flex-start;
   gap: 0.75rem;
   padding: 1rem;
-  border: 2px solid var(--color-border, #e5e7eb);
+  border: 2px solid var(--color-border);
   border-radius: 0.5rem;
-  background-color: var(--color-bg-primary, #ffffff);
+  background-color: var(--color-bg-primary);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .timing-option:hover {
-  border-color: var(--color-primary, #3b82f6);
-  background-color: var(--color-bg-secondary, #f9fafb);
+  border-color: var(--color-primary);
+  background-color: var(--color-bg-secondary);
 }
 
 .timing-option.selected {
-  border-color: var(--color-primary, #3b82f6);
-  background-color: rgba(59, 130, 246, 0.05);
+  border-color: var(--color-primary);
+  background-color: color-mix(in srgb, var(--color-primary) 5%, transparent);
 }
 
 .timing-option input[type='radio'] {
   margin-top: 0.25rem;
   cursor: pointer;
-  accent-color: var(--color-primary, #3b82f6);
+  accent-color: var(--color-primary);
 }
 
 /* ── Quiet Hours Inputs ────────────────────────────────────── */
@@ -65,33 +65,33 @@
 .time-input-group label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--color-text-primary, #111827);
+  color: var(--color-text-primary);
 }
 
 .time-input {
   padding: 0.75rem;
-  border: 1px solid var(--color-border, #d1d5db);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  background-color: var(--color-bg-input, #ffffff);
-  color: var(--color-text-primary, #111827);
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
   font-size: 0.875rem;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
 
 .time-input:focus {
   outline: none;
-  border-color: var(--color-primary, #3b82f6);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 /* ── Reset Button ────────────────────────────────────────── */
 
 .reset-button {
   padding: 0.75rem 1.5rem;
-  border: 1px solid var(--color-border, #d1d5db);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  background-color: var(--color-bg-secondary, #f9fafb);
-  color: var(--color-text-primary, #111827);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -99,9 +99,9 @@
 }
 
 .reset-button:hover {
-  background-color: var(--color-bg-primary, #ffffff);
-  border-color: var(--color-primary, #3b82f6);
-  color: var(--color-primary, #3b82f6);
+  background-color: var(--color-bg-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .reset-button:active {
@@ -130,34 +130,6 @@
   }
 }
 
-/* ── Dark Mode Support ─────────────────────────────────────── */
-
-@media (prefers-color-scheme: dark) {
-  .reminder-section {
-    background-color: var(--color-bg-secondary, #1f2937);
-    border-color: var(--color-border, #374151);
-  }
-
-  .timing-option {
-    background-color: var(--color-bg-primary, #111827);
-    border-color: var(--color-border, #374151);
-  }
-
-  .timing-option:hover {
-    background-color: var(--color-bg-secondary, #1f2937);
-  }
-
-  .time-input {
-    background-color: var(--color-bg-input, #111827);
-    color: var(--color-text-primary, #f3f4f6);
-  }
-
-  .reset-button {
-    background-color: var(--color-bg-secondary, #1f2937);
-    color: var(--color-text-primary, #f3f4f6);
-  }
-
-  .reset-button:hover {
-    background-color: var(--color-bg-primary, #111827);
-  }
-}
+/* Dark mode is now handled automatically: all colors above reference tokens from
+   src/index.css, which resolve differently under [data-theme="dark"]. No separate
+   prefers-color-scheme override is needed here anymore. */

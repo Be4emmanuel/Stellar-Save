@@ -1,6 +1,6 @@
-import "./Card.css";
+import './Card.css';
 
-type CardVariant = "default" | "outlined" | "elevated";
+type CardVariant = 'default' | 'outlined' | 'elevated';
 
 interface CardProps {
   variant?: CardVariant;
@@ -10,28 +10,39 @@ interface CardProps {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  ariaLabel?: string;
 }
 
 export function Card({
-  variant = "default",
+  variant = 'default',
   hoverable = false,
   header,
   footer,
   children,
-  className = "",
+  className = '',
   onClick,
+  ariaLabel,
 }: CardProps) {
-  const classes = [
-    "card",
-    `card-${variant}`,
-    hoverable ? "card-hoverable" : "",
-    className,
-  ]
+  const classes = ['card', `card-${variant}`, hoverable ? 'card-hoverable' : '', className]
     .filter(Boolean)
-    .join(" ");
+    .join(' ');
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      onClick();
+    }
+  };
 
   return (
-    <div className={classes} onClick={onClick}>
+    <div
+      className={classes}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={handleKeyDown}
+      aria-label={onClick ? ariaLabel : undefined}
+    >
       {header && <div className="card-header">{header}</div>}
       <div className="card-body">{children}</div>
       {footer && <div className="card-footer">{footer}</div>}

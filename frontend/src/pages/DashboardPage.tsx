@@ -2,17 +2,22 @@ import { Box, Typography } from '@mui/material';
 import { AppLayout } from '../ui';
 import { ToastProvider } from '../components/Toast/ToastProvider';
 import { ErrorBoundary } from '../components/ErrorBoundary/ErrorBoundary';
-import { DashboardOverview } from '../components/dashboard/DashboardOverview';
-import { DashboardGroupCard } from '../components/dashboard/DashboardGroupCard';
-import { PayoutSchedule } from '../components/dashboard/PayoutSchedule';
-import { TransactionTable } from '../components/dashboard/TransactionTable';
-import { QuickActionSidebar } from '../components/dashboard/QuickActionSidebar';
+import {
+  DashboardOverview,
+  DashboardGroupCard,
+  PayoutSchedule,
+  TransactionTable,
+  QuickActionSidebar,
+  DashboardSummary,
+  DashboardChart,
+  DashboardActions,
+} from '../components/dashboard';
 import { BalanceWarningBanner } from '../components/BalanceWarningBanner';
-import { useDashboard } from '../hooks/useDashboard';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { useBalanceWarning } from '../hooks/useBalanceWarning';
 
 function DashboardContent() {
-  const { stats, groups, payouts, transactions, isLoading } = useDashboard();
+  const { stats, groups, payouts, transactions, isLoading } = useDashboardData();
   const balanceWarning = useBalanceWarning(groups);
 
   return (
@@ -24,10 +29,15 @@ function DashboardContent() {
         {/* Balance warning banner */}
         <BalanceWarningBanner warning={balanceWarning} />
 
-        {/* 1. Overview hero */}
-        <DashboardOverview stats={stats} isLoading={isLoading} />
+        {/* 1. Dashboard summary & quick actions */}
+        <DashboardSummary stats={stats} isLoading={isLoading} />
+        <DashboardActions />
 
-        {/* 2. My Groups + Payout Schedule */}
+        {/* 2. Overview hero & charts */}
+        <DashboardOverview stats={stats} isLoading={isLoading} />
+        <DashboardChart groups={groups} isLoading={isLoading} />
+
+        {/* 3. My Groups + Payout Schedule */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 300px' }, gap: 3, alignItems: 'start' }}>
           <Box>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>My Groups</Typography>
@@ -40,7 +50,7 @@ function DashboardContent() {
           <PayoutSchedule payouts={payouts} isLoading={isLoading} />
         </Box>
 
-        {/* 3. Recent Transactions */}
+        {/* 4. Recent Transactions */}
         <TransactionTable transactions={transactions} isLoading={isLoading} />
       </Box>
 

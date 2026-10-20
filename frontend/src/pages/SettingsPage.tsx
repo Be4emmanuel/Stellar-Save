@@ -1,11 +1,12 @@
 import { Stack, Typography, Divider } from '@mui/material';
 import { Link } from 'react-router-dom';
-import { AppCard, AppLayout } from '../ui';
-import { ThemeToggle } from '../components/ThemeToggle';
+
 import { LanguageSelector } from '../components/LanguageSelector';
-import { useTheme } from '../hooks/useTheme';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { useI18n } from '../hooks/useI18n';
+import { useTheme } from '../hooks/useTheme';
 import { ROUTES } from '../routing/constants';
+import { AppCard, AppLayout } from '../ui';
 
 /**
  * Settings page - application settings
@@ -34,15 +35,15 @@ export default function SettingsPage() {
             </Typography>
 
             <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
-              {(["light", "dark", "system"] as const).map((opt) => (
+              {(['light', 'dark', 'system'] as const).map((opt) => (
                 <label
                   key={opt}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                    cursor: "pointer",
-                    fontSize: "0.875rem",
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
                     fontWeight: mode === opt ? 600 : 400,
                   }}
                 >
@@ -52,7 +53,7 @@ export default function SettingsPage() {
                     value={opt}
                     checked={mode === opt}
                     onChange={() => setMode(opt)}
-                    style={{ accentColor: "var(--color-primary)" }}
+                    style={{ accentColor: 'var(--color-primary)' }}
                   />
                   {opt.charAt(0).toUpperCase() + opt.slice(1)}
                 </label>
