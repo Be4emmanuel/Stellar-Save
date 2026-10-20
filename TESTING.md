@@ -1,5 +1,7 @@
 # Testing Guide
 
+> **First time?** See [docs/guides/getting-started.md](docs/guides/getting-started.md) for full environment setup before running tests.
+
 ## Overview
 
 This project uses a comprehensive testing strategy including:
