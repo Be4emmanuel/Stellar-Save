@@ -4,27 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
  * E2E tests: Contribution flow
  * Covers navigating to a group detail page and interacting with contribution UI.
  */
-
-/**
- * Mocks a connected Freighter wallet so pages that gate their content behind
- * a wallet connection (e.g. the Contribute button) actually render it,
- * instead of routinely hitting the "no wallet" branch (see #1911 — this is
- * why `clicking contribute button opens confirmation modal` and its
- * siblings below used to skip on every run).
- */
-async function mockConnectedWallet(page: Page) {
-  await page.addInitScript(() => {
-    (window as unknown as Record<string, unknown>).freighter = {
-      isConnected: () => Promise.resolve(true),
-      getPublicKey: () =>
-        Promise.resolve('GTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDE'),
-      getNetwork: () => Promise.resolve('TESTNET'),
-      signTransaction: () => Promise.resolve('mock-signed-tx'),
-    };
-  });
-}
-
-test.describe('Contribution flow', () => {
+test.describe('@journey Contribution flow', () => {
   test('group detail page loads without crashing', async ({ page }) => {
     await page.goto('/groups/test-group-1');
     await expect(page.locator('body')).toBeVisible();

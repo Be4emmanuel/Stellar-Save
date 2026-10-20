@@ -4,26 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
  * E2E tests: Group creation flow
  * Covers navigation to create group page, form rendering, and validation.
  */
-
-/**
- * Mocks a connected Freighter wallet so pages that gate their content behind
- * a wallet connection (e.g. the create-group form) actually render it,
- * instead of routinely hitting the "no wallet" branch (see #1911 — this is
- * why the two tests below used to skip on every run).
- */
-async function mockConnectedWallet(page: Page) {
-  await page.addInitScript(() => {
-    (window as unknown as Record<string, unknown>).freighter = {
-      isConnected: () => Promise.resolve(true),
-      getPublicKey: () =>
-        Promise.resolve('GTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDE'),
-      getNetwork: () => Promise.resolve('TESTNET'),
-      signTransaction: () => Promise.resolve('mock-signed-tx'),
-    };
-  });
-}
-
-test.describe('Group creation flow', () => {
+test.describe('@journey Group creation flow', () => {
   test('create group page loads without crashing', async ({ page }) => {
     await page.goto('/groups/create');
     await expect(page.locator('body')).toBeVisible();
