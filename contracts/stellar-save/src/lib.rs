@@ -86,6 +86,8 @@ pub mod gas_benchmark;
 pub mod insurance_integration_tests;
 pub mod test_utils;
 // mod invitation_tests;
+#[cfg(test)]
+pub mod test_utils;
 // mod merge_tests;
 // mod migration_matrix_tests;
 // mod migration_tests;
