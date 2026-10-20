@@ -48,6 +48,15 @@ export interface ContributionMadeEvent {
   contributedAt: bigint;
 }
 
+export interface ContributionDueEvent {
+  type: 'contribution_due';
+  groupId: bigint;
+  member: string;
+  cycle: number;
+  deadline: bigint;
+  emittedAt: bigint;
+}
+
 export interface PayoutExecutedEvent {
   type: 'payout_executed';
   groupId: bigint;
@@ -350,6 +359,7 @@ export type ContractEvent =
   | MemberLeftEvent
   | MemberRemovedEvent
   | ContributionMadeEvent
+  | ContributionDueEvent
   | PayoutExecutedEvent
   | ContributionMissedEvent
   | GroupCompletedEvent
@@ -394,6 +404,7 @@ export const CONTRACT_EVENT_TOPICS: ContractEventTopic[] = [
   'member_left',
   'member_removed',
   'contribution_made',
+  'contribution_due',
   'payout_executed',
   'contribution_missed',
   'group_completed',
