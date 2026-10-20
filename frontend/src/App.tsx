@@ -1,8 +1,6 @@
 import { lazy, Suspense } from 'react';
 
 import './App.css';
-import { FeedbackWidget } from './components/FeedbackWidget';
-import { CardSkeleton } from './components/Skeleton';
 import { AppProviders } from './context/AppProviders';
 import { useDeepLink } from './hooks/useDeepLink';
 import { RouteLoadingFallback } from './routing/RouteLoadingFallback';
