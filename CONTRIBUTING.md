@@ -66,6 +66,37 @@ For full architecture details see [docs/architecture.md](docs/architecture.md).
 
 ---
 
+## Package Manager
+
+> **This repository uses [pnpm@9](https://pnpm.io/) as its sole package manager.**
+> See [docs/adr/ADR-006-package-manager.md](docs/adr/ADR-006-package-manager.md) for the full rationale.
+
+### Rule: always use `pnpm`, never `npm` or `yarn`
+
+Running `npm install` or `yarn` in any workspace generates a stale `package-lock.json`
+that conflicts with the canonical `pnpm-lock.yaml`. **PRs that add or modify
+`package-lock.json` will be rejected.**
+
+| Task                         | Command                                      |
+| ---------------------------- | -------------------------------------------- |
+| Install all workspace deps   | `pnpm install`                               |
+| Add a runtime dependency     | `pnpm add <package>`                         |
+| Add a dev dependency         | `pnpm add -D <package>`                      |
+| Remove a dependency          | `pnpm remove <package>`                      |
+| Run a package.json script    | `pnpm run <script>` or `pnpm <script>`       |
+| CI install (strict lockfile) | `pnpm install --frozen-lockfile`             |
+
+Corepack (bundled with Node.js 16.9+) will enforce the exact pnpm version declared
+in `package.json → "packageManager"`. Enable it once:
+
+```bash
+corepack enable
+```
+
+After that, `pnpm` will automatically use the pinned version without a separate install step.
+
+---
+
 ## Development Setup
 
 ### Prerequisites
@@ -75,7 +106,7 @@ For full architecture details see [docs/architecture.md](docs/architecture.md).
 | Rust                  | 1.81.0 (pinned) | [rustup.rs](https://rustup.rs)                                            |
 | Soroban / Stellar CLI | latest          | [Stellar CLI docs](https://developers.stellar.org/docs/tools/stellar-cli) |
 | Node.js               | 18+             | [nodejs.org](https://nodejs.org)                                          |
-| pnpm                  | 9 (pinned)      | `corepack enable` (version comes from `packageManager` in `package.json`) |
+| pnpm                  | 9.x (pinned)    | `corepack enable` (after Node.js install)                                 |
 
 The Rust toolchain version is pinned in `rust-toolchain.toml`. Running any `cargo` command will install it automatically via rustup.
 
@@ -85,9 +116,10 @@ The Rust toolchain version is pinned in `rust-toolchain.toml`. Running any `carg
 git clone https://github.com/Xoulomon/Stellar-Save.git
 cd Stellar-Save
 
-# Install every workspace package (frontend, backend, mobile, packages/*)
-# plus root tooling (commitlint, husky) from the single root pnpm-lock.yaml
+# Enable Corepack so pnpm@9 is used automatically
 corepack enable
+
+# Install all workspace dependencies (frontend, backend, mobile, packages/*)
 pnpm install
 ```
 
@@ -120,7 +152,7 @@ cargo build --target wasm32-unknown-unknown --release
 
 ```bash
 cd frontend
-npm run dev
+pnpm dev
 ```
 
 ### Deploy to testnet
