@@ -111,8 +111,8 @@ if [[ $FAIL -gt 0 ]]; then
     echo "  - $f"
   done
   echo ""
-  echo "To quarantine a flaky test:"
-  echo "  echo '.maestro/$f' >> mobile/quarantine/quarantined_tests.txt"
+  echo "To quarantine a flaky test (issue #1912 — owner and expiry are required):"
+  echo "  echo '.maestro/$f    # QUARANTINED $(date +%Y-%m-%d), owner: @<your-handle>, expires: <YYYY-MM-DD>, issue: #<n> — <one-line reason>' >> mobile/quarantine/quarantined_tests.txt"
   exit 1
 fi
 
