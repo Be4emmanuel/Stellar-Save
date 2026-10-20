@@ -11,6 +11,8 @@
  */
 
 import { BaseCostProvider } from './cost-provider';
+import { logger } from './logger';
+
 import type { ServiceCost, CostTrend, OptimizationRecommendation, CostReport } from './cost-provider';
 
 /**
@@ -121,8 +123,8 @@ export class MockCostProvider extends BaseCostProvider {
   }
 
   protected onCostSpikeDetected(service: string, previous: number, current: number, pctChange: number): void {
-    // Mock: just log to console (no Prometheus)
-    console.log(`[MockCostProvider] Cost spike detected for ${service}: ${pctChange.toFixed(1)}%`);
+    // Mock: just log (no Prometheus)
+    logger.info(`[MockCostProvider] Cost spike detected for ${service}: ${pctChange.toFixed(1)}%`);
   }
 
   async buildCostReport(): Promise<CostReport> {
