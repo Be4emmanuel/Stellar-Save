@@ -30,6 +30,14 @@
 //! (e.g. schema/version bumps), not WASM upgrades.
 
 pub mod auth;
+// `clone` is an intended-but-unfinished feature: clone_group / CloneOverrides are
+// fully implemented and tested but no contract entry-point in contract.rs calls
+// them.  Gate behind `clone-group` so the dead code is excluded from production
+// WASM until the entry-point is wired.  To integrate: add a `clone_group`
+// entry-point to contract.rs that delegates to `crate::clone::clone_group`, then
+// enable the feature in the release profile.  See Cargo.toml [features] for the
+// tracking note.
+#[cfg(feature = "clone-group")]
 pub mod clone;
 pub mod constants;
 pub mod contract;
@@ -61,19 +69,22 @@ pub mod token;
 pub mod types;
 pub mod zk_proof;
 
-pub mod milestones;
+// ── Unfinished / not-yet-wired features ───────────────────────────────────────
+// These modules are fully implemented and tested but are not yet exposed through
+// any #[contractimpl] entry-point in contract.rs.  They are compiled only when
+// the corresponding feature flag is enabled, keeping the default production WASM
+// free of dead code.  See Cargo.toml [features] for full tracking notes.
 
-// ── Test-only modules (excluded from production builds) ──────────────────────
-#[cfg(test)] pub mod admin_actions_tests;
-#[cfg(test)] pub mod cei_tests;
-#[cfg(test)] pub mod gas_benchmark;
-#[cfg(test)] pub mod insurance_integration_tests;
-#[cfg(test)] pub mod test_utils;
-#[cfg(test)] pub mod wrapping_audit;
-#[cfg(test)] pub mod zk_integration_tests;
-#[cfg(test)] pub mod zk_tests;
+// `group-templates` feature — list_templates / get_template / create_group_from_template.
+// Wire to contract.rs entry-points when the frontend template-picker flow is ready.
+// Docs: docs/group-templates.md
+#[cfg(feature = "group-templates")]
+pub mod templates;
+
 // mod auto_contribution_tests;
 // mod invitation_tests;
+#[cfg(test)]
+pub mod test_utils;
 // mod merge_tests;
 // mod migration_matrix_tests;
 // mod migration_tests;

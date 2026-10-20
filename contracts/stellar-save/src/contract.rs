@@ -16,7 +16,8 @@ use crate::search::{SearchParams, SearchResult};
 use crate::storage::{StorageKey, StorageKeyBuilder};
 use crate::types::{AssignmentMode, ContractConfig, MemberProfile, PayoutScheduleEntry};
 use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, String, Symbol, Vec, Map, BytesN};
-use crate::{governance, milestones, payout_executor, penalty, rating, refund, search, migration};
+use core::cmp;
+use crate::{auth, governance, milestones, payout_executor, penalty, rating, refund, search, migration};
 
 #[contract]
 pub struct StellarSaveContract;
