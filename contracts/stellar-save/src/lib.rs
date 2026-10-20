@@ -40,6 +40,8 @@ pub mod types;
 // mod auto_contribution_tests;
 pub mod gas_benchmark;
 // mod invitation_tests;
+#[cfg(test)]
+pub mod test_utils;
 // mod merge_tests;
 // mod migration_matrix_tests;
 // mod migration_tests;
