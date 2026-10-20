@@ -1,6 +1,6 @@
 import { Box, Container, Grid, Stack, Typography, useTheme } from '@mui/material';
 
-import { AppButton } from '../ui/components/AppButton';
+import { AppButton } from '@/ui/components/AppButton';
 
 /**
  * Above-the-fold headline and primary calls to action.

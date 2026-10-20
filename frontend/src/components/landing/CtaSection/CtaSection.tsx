@@ -1,6 +1,6 @@
 import { Box, Container, Stack, Typography, useTheme } from '@mui/material';
 
-import { AppButton } from '../ui/components/AppButton';
+import { AppButton } from '@/ui/components/AppButton';
 
 /**
  * Closing call to action.

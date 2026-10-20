@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      '@': path.resolve(__dirname, 'src'),
       '@creit.tech/stellar-wallets-kit/modules/freighter': path.resolve(
         __dirname,
         'node_modules/@creit.tech/stellar-wallets-kit/esm/sdk/modules/freighter.module.js',

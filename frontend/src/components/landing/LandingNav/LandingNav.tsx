@@ -1,6 +1,13 @@
 import { Box, Container, Stack, Typography, useTheme } from '@mui/material';
 
-import { AppButton } from '../ui/components/AppButton';
+import { AppButton } from '@/ui/components/AppButton';
+import type { LandingNavLink } from './types';
+
+const navigationLinks: LandingNavLink[] = [
+  { label: 'How It Works', href: '#how-it-works' },
+  { label: 'Features', href: '#features' },
+  { label: 'Testimonials', href: '#testimonials' },
+];
 
 /**
  * Sticky banner with the primary navigation and wallet connect action.
@@ -32,15 +39,11 @@ export function LandingNav() {
           Stellar Save
         </Typography>
         <Stack component="nav" aria-label="Main navigation" direction="row" spacing={2}>
-          <AppButton variant="text" size="small" href="#how-it-works">
-            How It Works
-          </AppButton>
-          <AppButton variant="text" size="small" href="#features">
-            Features
-          </AppButton>
-          <AppButton variant="text" size="small" href="#testimonials">
-            Testimonials
-          </AppButton>
+          {navigationLinks.map(({ label, href }) => (
+            <AppButton key={href} variant="text" size="small" href={href}>
+              {label}
+            </AppButton>
+          ))}
           <AppButton variant="outlined" size="small" aria-label="Connect your Stellar wallet">
             Connect Wallet
           </AppButton>
