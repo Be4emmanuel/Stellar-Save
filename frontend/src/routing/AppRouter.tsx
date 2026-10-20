@@ -1,19 +1,12 @@
-import { Box } from '@mui/material';
 import { Suspense, type JSX } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
-import { Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { RouteBoundary } from './RouteBoundary';
-import { RouteLoadingFallback } from './RouteLoadingFallback';
-import { routeConfig } from './routes';
-import { ProtectedRoute } from './ProtectedRoute';
 import { AdminRoute } from './AdminRoute';
 import { ROUTES } from './constants';
 import { ProtectedRoute } from './ProtectedRoute';
 import { RouteBoundary } from './RouteBoundary';
+import { RouteLoadingFallback } from './RouteLoadingFallback';
 import { routeConfig } from './routes';
-import { Skeleton } from '../components/Skeleton/Skeleton';
 
 /**
  * Main application router component.
