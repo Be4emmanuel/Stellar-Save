@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useAsyncData, mockDelay } from './useAsyncData';
 import type { UserStats } from './useUserProfile';
 
 export interface MemberProfile {
@@ -17,10 +17,7 @@ export interface MemberProfile {
  * Formula: weighted sum of on-time rate (50%), group participation (30%),
  * and streak bonus (20%).
  */
-export function computeReputationScore(
-  stats: UserStats,
-  currentStreak: number,
-): number {
+export function computeReputationScore(stats: UserStats, currentStreak: number): number {
   const onTimeRate =
     stats.completedCycles > 0
       ? Math.min(stats.completedCycles / Math.max(stats.groupsJoined, 1), 1)
@@ -58,28 +55,14 @@ function mockProfileForAddress(address: string): MemberProfile {
 }
 
 export function useMemberProfile(address: string | undefined) {
-  const [profile, setProfile] = useState<MemberProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useAsyncData<MemberProfile>(
+    () =>
+      mockDelay(() => mockProfileForAddress(address as string), 400).catch(() => {
+        throw new Error('Failed to load member profile.');
+      }),
+    [address],
+    { enabled: !!address }
+  );
 
-  useEffect(() => {
-    if (!address) {
-      setProfile(null);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    const t = setTimeout(() => {
-      try {
-        setProfile(mockProfileForAddress(address));
-      } catch {
-        setError('Failed to load member profile.');
-      } finally {
-        setIsLoading(false);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [address]);
-
-  return { profile, isLoading, error };
+  return { profile: data, isLoading, error };
 }

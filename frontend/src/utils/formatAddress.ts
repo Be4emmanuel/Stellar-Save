@@ -1,12 +1,6 @@
-export interface FormatAddressOptions {
-  prefixChars?: number;
-  suffixChars?: number;
-}
-
-export function formatAddress(
-  address: string,
-  { prefixChars = 6, suffixChars = 4 }: FormatAddressOptions = {}
-): string {
-  if (!address || address.length <= prefixChars + suffixChars) return address;
-  return `${address.slice(0, prefixChars)}...${address.slice(-suffixChars)}`;
-}
+/**
+ * Re-exports from the shared @stellar-save/sdk package.
+ * Existing imports of this module continue to work unchanged.
+ */
+export { formatAddress } from '@stellar-save/sdk';
+export type { FormatAddressOptions } from '@stellar-save/sdk';

@@ -1,30 +1,53 @@
 import crypto from 'crypto';
-import { BackupService, S3Client } from './backup_service';
-import { BackupJob } from './models';
+
+import { config } from './config';
+
+import type { BackupService, S3Client } from './backup_service';
+import type { BackupJob } from './models';
+
 
 export interface RecoveryResult {
   jobId: string;
   restoredAt: number;
   recordCount: number;
   checksum: string;
+  restoreDurationMs: number;
+}
+
+export interface RestoreTarget {
+  applyFull(payload: Record<string, unknown>): Promise<void>;
+  applyIncremental(baseJobId: string, delta: Record<string, unknown>): Promise<void>;
+}
+
+class NoopRestoreTarget implements RestoreTarget {
+  async applyFull(_payload: Record<string, unknown>): Promise<void> {}
+  async applyIncremental(_baseJobId: string, _delta: Record<string, unknown>): Promise<void> {}
 }
 
 export class RecoveryService {
   private service: BackupService;
   private s3: S3Client;
   private bucket: string;
+  private target: RestoreTarget;
 
-  constructor(service: BackupService, s3Client: S3Client) {
+  constructor(
+    service: BackupService,
+    s3Client: S3Client,
+    target: RestoreTarget = new NoopRestoreTarget()
+  ) {
     this.service = service;
     this.s3 = s3Client;
-    this.bucket = process.env.BACKUP_S3_BUCKET || 'stellar-save-backups';
+    this.bucket = config.backup.bucket;
+    this.target = target;
   }
 
   /** Restore from a specific backup job */
   async restore(jobId: string): Promise<RecoveryResult> {
+    const startedAt = Date.now();
     const job = this.service.getJob(jobId);
     if (!job) throw new Error(`Backup job not found: ${jobId}`);
-    if (job.status !== 'completed') throw new Error(`Backup job ${jobId} is not completed (status: ${job.status})`);
+    if (job.status !== 'completed')
+      throw new Error(`Backup job ${jobId} is not completed (status: ${job.status})`);
     if (!job.s3Key) throw new Error(`Backup job ${jobId} has no S3 key`);
 
     const body = await this.s3.getObject({ Bucket: this.bucket, Key: job.s3Key });
@@ -32,20 +55,28 @@ export class RecoveryService {
     // Verify checksum
     const actualChecksum = crypto.createHash('sha256').update(body).digest('hex');
     if (job.checksum && actualChecksum !== job.checksum) {
-      throw new Error(`Checksum mismatch for backup ${jobId}: expected ${job.checksum}, got ${actualChecksum}`);
+      throw new Error(
+        `Checksum mismatch for backup ${jobId}: expected ${job.checksum}, got ${actualChecksum}`
+      );
     }
 
     const payload = JSON.parse(body.toString('utf-8'));
 
     // For incremental backups, apply on top of the base full backup
     if (job.type === 'incremental' && job.baseBackupId) {
-      await this.applyIncremental(job.baseBackupId, payload);
+      await this.target.applyIncremental(job.baseBackupId, payload);
     } else {
-      await this.applyFull(payload);
+      await this.target.applyFull(payload);
     }
 
     const recordCount = this.countRecords(payload);
-    return { jobId, restoredAt: Date.now(), recordCount, checksum: actualChecksum };
+    return {
+      jobId,
+      restoredAt: Date.now(),
+      recordCount,
+      checksum: actualChecksum,
+      restoreDurationMs: Date.now() - startedAt,
+    };
   }
 
   /** Restore the latest completed backup */
@@ -57,18 +88,7 @@ export class RecoveryService {
 
   /** List available restore points */
   listRestorePoints(): BackupJob[] {
-    return this.service.listJobs().filter(j => j.status === 'completed');
-  }
-
-  private async applyFull(payload: Record<string, unknown>): Promise<void> {
-    // In production: write payload.data to the database/store
-    console.log('[RecoveryService] Applying full restore, timestamp:', payload.timestamp);
-  }
-
-  private async applyIncremental(baseJobId: string, delta: Record<string, unknown>): Promise<void> {
-    // First restore the base, then apply the delta
-    await this.restore(baseJobId);
-    console.log('[RecoveryService] Applying incremental delta on top of base:', baseJobId, 'timestamp:', delta.timestamp);
+    return this.service.listJobs().filter((j) => j.status === 'completed');
   }
 
   private countRecords(payload: Record<string, unknown>): number {

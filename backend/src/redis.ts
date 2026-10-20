@@ -1,19 +1,22 @@
 import Redis from 'ioredis';
-import dotenv from 'dotenv';
 
-dotenv.config();
+import { config } from './config';
 
 const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD || undefined,
+  host: config.redis.host,
+  port: config.redis.port,
+  password: config.redis.password,
 });
 
 let hits = 0;
 let misses = 0;
 
-export const recordHit = () => { hits++; };
-export const recordMiss = () => { misses++; };
+export const recordHit = () => {
+  hits++;
+};
+export const recordMiss = () => {
+  misses++;
+};
 
 export const getCacheStats = async () => {
   return {
@@ -49,4 +52,22 @@ export const delPattern = async (pattern: string) => {
   }
 };
 
-export default redis; 
+export const readinessCheckCache = async (): Promise<{
+  up: boolean;
+  latencyMs: number;
+  error?: string;
+}> => {
+  const start = Date.now();
+  try {
+    await redis.ping();
+    return { up: true, latencyMs: Date.now() - start };
+  } catch (err: any) {
+    return {
+      up: false,
+      latencyMs: Date.now() - start,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+};
+
+export default redis;

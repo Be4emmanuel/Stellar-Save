@@ -1,0 +1,29 @@
+{
+  "name": "@stellar-save/sdk",
+  "version": "0.1.0",
+  "description": "Shared TypeScript SDK: formatting/validation utilities and domain types for Stellar-Save",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "check:abi": "vitest run src/abi-drift.test.ts"
+  },
+  "peerDependencies": {
+    "@stellar/stellar-sdk": ">=14.0.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.6"
+  },
+  "license": "MIT"
+}

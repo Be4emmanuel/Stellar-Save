@@ -1,3 +1,12 @@
+// Re-export MemberStatus from the canonical SDK package.
+//
+// NOTE: The GraphQL API uses a separate Member type — see the generated types
+// in `src/generated/graphql.ts` (Member, GetMembersQuery, GetMemberQuery).
+// The types below are the frontend UI / REST-layer shapes.
+export type { MemberStatus } from '@stellar-save/sdk';
+
+import type { MemberStatus } from '@stellar-save/sdk';
+
 export type MemberSortOption =
   | 'contributions-desc'
   | 'contributions-asc'
@@ -32,7 +41,7 @@ export interface MemberProfile {
   payoutPosition: number;
   totalMembers: number;
   hasReceivedPayout: boolean;
-  status: 'active' | 'inactive' | 'pending' | 'removed';
+  status: MemberStatus;
   /** Streak of consecutive on-time contributions */
   streak?: number;
   /** Last contribution timestamp */

@@ -1,3 +1,25 @@
+<!-- Migration target for NOTIFICATION_SERVICE_INTEGRATION.md -->
+# Notification Service Integration
+
+This document is a migration target for the previous `NOTIFICATION_SERVICE_INTEGRATION.md` that lived in the repository root.
+
+Goals
+- Separate dispatch logic for email, push, and in-app channels into modular handlers.
+- Provide a single orchestration layer that composes channel handlers and handles retries, error handling, and observability.
+
+Next steps
+1. Locate existing monolithic dispatch implementation in `backend/src/services/notification` and extract:
+   - `emailDispatcher` -> `backend/src/services/notification/email.ts`
+   - `pushDispatcher` -> `backend/src/services/notification/push.ts`
+   - `inAppDispatcher` -> `backend/src/services/notification/inapp.ts`
+2. Add interfaces for `NotificationPayload` and `ChannelHandler` in `backend/src/services/notification/types.ts`.
+3. Add unit tests for each handler and integration tests for orchestration.
+
+References
+- docs/notification-service.md (this file)
+- docs/api-reference.md
+
+TODO: paste content from the old NOTIFICATION_SERVICE_INTEGRATION.md here when available.
 # Notification Service Implementation (Issue #557)
 
 ## Overview

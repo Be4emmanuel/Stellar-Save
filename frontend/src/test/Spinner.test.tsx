@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
+
 import { Spinner, FullPageLoader } from '../components/Spinner';
 
 describe('Spinner', () => {
@@ -33,7 +34,7 @@ describe('Spinner', () => {
     (color) => {
       const { container } = render(<Spinner color={color} />);
       expect(container.querySelector(`.spinner-${color}`)).toBeInTheDocument();
-    },
+    }
   );
 });
 

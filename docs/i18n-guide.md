@@ -11,8 +11,9 @@ This guide covers everything you need to know to contribute translations or work
 3. [Translation File Format](#translation-file-format)
 4. [Context for Translators](#context-for-translators)
 5. [Translation Testing Guide](#translation-testing-guide)
-6. [Language-Specific Considerations](#language-specific-considerations)
-7. [Recruit Community Translators](#recruit-community-translators)
+6. [Unused Keys Audit](#unused-keys-audit)
+7. [Language-Specific Considerations](#language-specific-considerations)
+8. [Recruit Community Translators](#recruit-community-translators)
 
 ---
 
@@ -251,6 +252,77 @@ After translating, check these UI areas that are most likely to break with longe
 - Settings page descriptions
 - Scheduler form labels and validation messages
 - Balance warning banner
+
+---
+
+## Unused Keys Audit
+
+Over time, translation keys accumulate as UI changes, components are refactored, or features are removed. Unused keys should be periodically identified and removed to keep locale files clean and reduce maintenance burden.
+
+### How to audit for unused keys
+
+Run this script from the `frontend/` directory to identify which keys in your locale files are not being used anywhere in the codebase:
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+
+const en = JSON.parse(fs.readFileSync('./src/i18n/locales/en.json', 'utf-8'));
+
+const flatKeys = (obj, prefix = '') =>
+  Object.entries(obj).flatMap(([k, v]) =>
+    typeof v === 'object' && v !== null
+      ? flatKeys(v, prefix + k + '.')
+      : [prefix + k]
+  );
+
+const allKeys = flatKeys(en);
+
+const srcDir = './src';
+const files = [];
+const walkDir = (dir) => {
+  fs.readdirSync(dir).forEach(file => {
+    const filePath = path.join(dir, file);
+    if (fs.statSync(filePath).isDirectory()) {
+      walkDir(filePath);
+    } else if (['.ts', '.tsx', '.js', '.jsx'].includes(path.extname(file))) {
+      files.push(fs.readFileSync(filePath, 'utf-8'));
+    }
+  });
+};
+walkDir(srcDir);
+
+const content = files.join('\n');
+
+const unused = allKeys.filter(key => {
+  const patterns = [
+    new RegExp(\`t\\(['\"]\${key}['\"]\`, 'g'),
+    new RegExp(\`t\\([\`]\${key}[\`]\`, 'g'),
+  ];
+  return !patterns.some(p => p.test(content));
+});
+
+console.log('Unused keys:');
+unused.forEach(key => console.log('  ' + key));
+console.log(\`\nTotal: \${unused.length} unused keys\`);
+"
+```
+
+### Removing unused keys
+
+1. **Audit all locales** — run the script above to identify unused keys.
+2. **Verify they are truly unused** — check that the key is not conditionally used or dynamically constructed.
+3. **Remove from all locales** — delete the key from `en.json`, `fr.json`, `yo.json`, and any other locale files.
+4. **Test** — run `npm test` to ensure no tests reference the removed keys.
+5. **Verify no console warnings** — start the dev server and check the browser console for "missing key" warnings.
+
+### Last audit
+
+- **Date**: July 28, 2026
+- **Keys removed**: `common.save`, `common.cancel`, `scheduler.balanceWarning`
+- **Reason**: These keys were defined in locale files but never used in the codebase. The common namespace was unused, and the balance warning message is now hardcoded in the component.
+- **Files affected**: `frontend/src/locales/en.json`, `frontend/src/locales/fr.json`, `frontend/src/locales/yo.json`
 
 ---
 

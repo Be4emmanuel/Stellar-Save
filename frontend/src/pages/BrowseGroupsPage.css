@@ -40,7 +40,7 @@
   gap: 1rem;
   padding: 2rem;
   text-align: center;
-  color: #e53e3e;
+  color: var(--color-danger);
 }
 
 .browse-groups-error p {
@@ -57,19 +57,13 @@
 
 .browse-groups-summary {
   padding-bottom: 1rem;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.browse-groups-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: 1fr;
+  color: var(--color-text-secondary);
 }
 
 .browse-groups-sentinel {
   padding: 1rem 0;
   text-align: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-secondary);
 }
 
 .browse-groups-end-message {

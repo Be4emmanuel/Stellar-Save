@@ -1,32 +1,64 @@
 import { Horizon } from '@stellar/stellar-sdk';
-import { PrismaClient } from './generated/prisma/client';
-import { WebPushService } from './web_push_service';
 
-// Event types emitted by the Stellar savings contract
-const PAYOUT_EVENT_TYPES = ['payout', 'payout_received', 'payoutreceived', 'payout_processed'];
-const MISSED_CONTRIBUTION_TYPES = ['missed_contribution', 'missedcontribution', 'contribution_missed', 'missed'];
+import { PrismaClient } from './generated/prisma/client';
+import { GroupStateCache, isStateMutatingEvent } from './lib/cache';
+import { fetchWithCorrelationId } from './lib/http';
+import { logger } from './logger';
+import { eventsIndexedTotal, sorobanRpcCallsTotal } from './metrics';
+import { CONTRACT_EVENT_TOPICS } from '../../packages/events-schema/generated/events';
+
+import type { WebPushService } from './web_push_service';
+
+// Typed topic constants — must exist in the canonical schema
+const PAYOUT_EVENT_TYPES: string[] = ['payout_executed'];
+const MISSED_CONTRIBUTION_TYPES: string[] = ['contribution_missed'];
+
+// Fail fast if topics drift from the canonical schema
+const unknownTopics = [...PAYOUT_EVENT_TYPES, ...MISSED_CONTRIBUTION_TYPES].filter(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- CONTRACT_EVENT_TOPICS is string[], the cast narrows the filter predicate
+  (t) => !CONTRACT_EVENT_TOPICS.includes(t as any)
+);
+if (unknownTopics.length) {
+  throw new Error(`[contract_event_indexer] Unknown event topics: ${unknownTopics.join(', ')}`);
+}
 
 function isPayout(eventType: string): boolean {
-  return PAYOUT_EVENT_TYPES.includes(eventType.toLowerCase().replace(/-/g, '_'));
+  return PAYOUT_EVENT_TYPES.includes(eventType);
 }
 
 function isMissedContribution(eventType: string): boolean {
   return MISSED_CONTRIBUTION_TYPES.includes(eventType.toLowerCase().replace(/-/g, '_'));
 }
 
+// Minimal shape of a Horizon Soroban contract event record
+interface HorizonEventRecord {
+  type?: string;
+  eventType?: string;
+  topic?: unknown[];
+  data?: Record<string, unknown>;
+  contractId?: string;
+  transactionHash?: string;
+  txHash?: string;
+  ledger?: number;
+  ledgerSeq?: number;
+  createdAt?: string;
+  paging_token?: string;
+}
+
 // Extract member addresses from Stellar contract event topics/data
-function extractMemberAddresses(event: any): string[] {
+function extractMemberAddresses(event: HorizonEventRecord): string[] {
   const addresses: string[] = [];
 
   const topicsArr: unknown[] = Array.isArray(event.topic) ? event.topic : [];
   for (const t of topicsArr) {
     if (typeof t === 'string' && t.startsWith('G')) addresses.push(t);
-    else if (typeof t === 'object' && t !== null && 'address' in t) addresses.push((t as any).address);
+    else if (typeof t === 'object' && t !== null && 'address' in t)
+      addresses.push((t as { address: string }).address);
   }
 
   const data = event.data ?? {};
   for (const key of ['member', 'recipient', 'address', 'sender']) {
-    if (typeof data[key] === 'string') addresses.push(data[key]);
+    if (typeof data[key] === 'string') addresses.push(data[key] as string);
   }
 
   return [...new Set(addresses)];
@@ -39,123 +71,275 @@ export class ContractEventIndexer {
   private isRunning = false;
   private webPush?: WebPushService;
 
-  constructor(horizonUrl: string, contractId: string, databaseUrl: string, webPush?: WebPushService) {
+  constructor(
+    horizonUrl: string,
+    contractId: string,
+    databaseUrl: string,
+    webPush?: WebPushService
+  ) {
     this.server = new Horizon.Server(horizonUrl);
     this.contractId = contractId;
-    // Set the database URL in environment for Prisma
     process.env.DATABASE_URL = databaseUrl;
-    this.prisma = new (PrismaClient as any)();
+    this.prisma = new PrismaClient();
     this.webPush = webPush;
   }
 
   async start(lastLedger?: number) {
     if (this.isRunning) {
-      console.log('Indexer is already running');
+      logger.info('Indexer is already running');
       return;
     }
 
     this.isRunning = true;
-    console.log('Starting contract event indexer...');
+    logger.info('Starting contract event indexer...');
 
     try {
-      // Get the latest ledger if not provided
-      let startLedger = lastLedger;
-      if (!startLedger) {
-        const latestLedger = await this.server.ledgers().order('desc').limit(1).call();
-        startLedger = latestLedger.records[0].sequence;
-      }
-
-      // Start streaming events
-      this.streamEvents(startLedger!);
+      const startLedger = lastLedger ?? (await this.loadStartLedger());
+      this.streamEvents(startLedger).catch((err) => {
+        logger.error('Fatal error in stream loop:', err);
+        this.isRunning = false;
+      });
     } catch (error) {
-      console.error('Error starting indexer:', error);
+      logger.error('Error starting indexer:', error);
       this.isRunning = false;
     }
   }
 
-  private async streamEvents(startLedger: number) {
-    let cursor = startLedger.toString();
+  async stop() {
+    this.isRunning = false;
+    await this.prisma.$disconnect();
+    logger.info('Indexer stopped');
+  }
+
+  async getEvents(options: {
+    contractId?: string;
+    eventType?: string;
+    startLedger?: number;
+    endLedger?: number;
+    startTime?: Date;
+    endTime?: Date;
+    limit?: number;
+    offset?: number;
+  }) {
+    const where: Record<string, unknown> = {};
+
+    if (options.contractId) where.contractId = options.contractId;
+    if (options.eventType) where.eventType = options.eventType;
+    if (options.startLedger || options.endLedger) {
+      where.ledgerSeq = {};
+      if (options.startLedger) (where.ledgerSeq as Record<string, unknown>).gte = options.startLedger;
+      if (options.endLedger) (where.ledgerSeq as Record<string, unknown>).lte = options.endLedger;
+    }
+    if (options.startTime || options.endTime) {
+      where.timestamp = {};
+      if (options.startTime) (where.timestamp as Record<string, unknown>).gte = options.startTime;
+      if (options.endTime) (where.timestamp as Record<string, unknown>).lte = options.endTime;
+    }
+
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+
+    const [events, total] = await Promise.all([
+      this.prisma.contractEvent.findMany({
+        where,
+        orderBy: { timestamp: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.contractEvent.count({ where }),
+    ]);
+
+    return { events, total, limit, offset };
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────────────────
+
+  private async streamEvents(startLedger: number): Promise<void> {
+    const stored = await this.loadCursorRecord();
+    // Use the persisted paging token if available; otherwise fall back to the
+    // startLedger sequence number (Horizon accepts ledger seq as a cursor).
+    let cursor: string = stored?.lastCursor || String(startLedger);
+
+    logger.info(`[ContractEventIndexer] Starting from cursor=${cursor}`);
 
     while (this.isRunning) {
-      try {
-        // Use the Horizon REST API directly for events
-        const url = new URL('/events', this.server.serverURL.toString());
-        url.searchParams.set('contract', this.contractId);
-        url.searchParams.set('cursor', cursor);
-        url.searchParams.set('order', 'asc');
-        url.searchParams.set('limit', '200');
+      // Each poll iteration is its own root span. Event-handling work below
+      // becomes a child span so latency of fetch vs. DB write is visible.
+      // The span resolves to the number of ms to wait before the next poll.
+      const delayMs = await withSpan(
+        'indexer.poll',
+        { 'indexer.contract_id': this.contractId, 'indexer.cursor': cursor },
+        async (span): Promise<number> => {
+          const url = new URL('/events', this.server.serverURL.toString());
+          url.searchParams.set('contract', this.contractId);
+          url.searchParams.set('startLedger', cursor);
+          url.searchParams.set('order', 'asc');
+          url.searchParams.set('limit', String(PAGE_LIMIT));
 
-        const response = await fetch(url.toString());
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          // Guarded by the Horizon breaker so a degraded endpoint backs the poll
+          // loop off immediately instead of burning the full request timeout on
+          // every iteration (#1511).
+          const data: Record<string, unknown> = await withHorizonCircuit(async () => {
+            const response = await fetchWithCorrelationId(url.toString());
+            sorobanRpcCallsTotal.inc({
+              method: 'getEvents',
+              status: response.ok ? 'success' : 'error',
+            });
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status} from ${url}`);
+            }
+            return response.json();
+          });
+          const records: HorizonEventRecord[] = (data._embedded as { records?: HorizonEventRecord[] })?.records ?? [];
+          span.setAttribute('indexer.records', records.length);
+
+          // No new events — idle until the next poll interval.
+          if (records.length === 0) {
+            return POLL_INTERVAL_MS;
+          }
+
+          await withSpan(
+            'indexer.process_events',
+            { 'indexer.records': records.length },
+            async () => {
+              for (const event of records) {
+                await this.storeEventFromHorizon(event);
+                await this.notifyOnEvent(event);
+              }
+            }
+          );
+
+          // Update cursor to the last processed event and keep draining (no delay).
+          cursor = records[records.length - 1].paging_token;
+          return 0;
         }
+      ).catch((error) => {
+        logger.error('[ContractEventIndexer] Poll error:', error);
+        return ERROR_BACKOFF_MS;
+      });
 
-        const data: any = await response.json();
-
-        if (!data._embedded || data._embedded.records.length === 0) {
-          // No new events, wait before checking again
-          await this.delay(5000); // 5 seconds
-          continue;
-        }
-
-        for (const event of data._embedded.records) {
-          await this.storeEventFromHorizon(event);
-          await this.notifyOnEvent(event);
-        }
-
-        // Update cursor to the last processed event
-        cursor = data._embedded.records[data._embedded.records.length - 1].paging_token;
-      } catch (error) {
-        console.error('Error streaming events:', error);
-        await this.delay(10000); // Wait 10 seconds on error
-      }
+      if (delayMs > 0) await this.delay(delayMs);
     }
   }
 
-  private async storeEventFromHorizon(event: any) {
+  /** Load the persisted cursor for this contract, returning null if none stored. */
+  private async loadCursorRecord(): Promise<{ lastCursor: string; lastLedger: number } | null> {
     try {
-      const stored = await this.prisma.contractEvent.create({
-        data: {
-          contractId: event.contractId || this.contractId,
-          eventType: event.type || 'unknown',
-          topics: event.topic || [],
-          data: event.data || {},
-          txHash: event.transactionHash || event.txHash,
-          ledgerSeq: event.ledger || event.ledgerSeq,
-          timestamp: event.createdAt ? new Date(event.createdAt) : new Date(),
-          blockTime: event.createdAt ? new Date(event.createdAt) : new Date(),
-        },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sorobanEventCursor model is pending Prisma migration; not yet in generated client
+      const row = await (this.prisma as any).sorobanEventCursor.findUnique({
+        where: { contractId: this.contractId },
+        select: { lastCursor: true, lastLedger: true },
       });
-      console.log(`Stored event: ${event.type} in ledger ${event.ledger}`);
+      return row ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Determine which ledger to start from when no explicit ledger is provided:
+   * - Use the persisted lastLedger if available
+   * - Otherwise fall back to the current chain tip
+   */
+  private async loadStartLedger(): Promise<number> {
+    const stored = await this.loadCursorRecord();
+    if (stored && stored.lastLedger > 0) {
+      logger.info(`[ContractEventIndexer] Resuming from persisted ledger ${stored.lastLedger}`);
+      return stored.lastLedger;
+    }
+
+    const latestLedger = await this.server.ledgers().order('desc').limit(1).call();
+    const seq: number = latestLedger.records[0].sequence;
+    logger.info(`[ContractEventIndexer] No prior cursor; starting from current tip ledger ${seq}`);
+    return seq;
+  }
+
+  /** Persist the latest cursor/ledger so polling can resume after a restart. */
+  private async persistCursor(lastCursor: string, lastLedger: number): Promise<void> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sorobanEventCursor model is pending Prisma migration; not yet in generated client
+      await (this.prisma as any).sorobanEventCursor.upsert({
+        where: { contractId: this.contractId },
+        update: { lastCursor, lastLedger },
+        create: { contractId: this.contractId, lastCursor, lastLedger },
+      });
+    } catch (err) {
+      logger.error('[ContractEventIndexer] Failed to persist cursor:', err);
+    }
+  }
+
+  private async storeEvent(event: HorizonEventRecord): Promise<void> {
+    try {
+      const stored = await withSpan(
+        'indexer.db.insert_event',
+        {
+          'db.system': 'postgresql',
+          'db.operation': 'insert',
+          'event.type': event.type || 'unknown',
+        },
+        () =>
+          this.prisma.contractEvent.create({
+            data: {
+              contractId: event.contractId || this.contractId,
+              eventType: event.type || 'unknown',
+              topics: event.topic || [],
+              data: event.data || {},
+              txHash: event.transactionHash || event.txHash,
+              ledgerSeq: event.ledger || event.ledgerSeq,
+              timestamp: event.createdAt ? new Date(event.createdAt) : new Date(),
+              blockTime: event.createdAt ? new Date(event.createdAt) : new Date(),
+            },
+          })
+      );
+      logger.info(`Stored event: ${event.type} in ledger ${event.ledger}`);
+      eventsIndexedTotal.inc({ event_type: event.type || 'unknown' });
+
+      // Bust cache for state-mutating events
+      if (isStateMutatingEvent(stored.eventType)) {
+        const groupId = this.extractGroupId(stored.data);
+        if (groupId) {
+          await GroupStateCache.invalidate(stored.contractId, String(groupId), stored.eventType);
+        } else {
+          await GroupStateCache.invalidateContract(stored.contractId, stored.eventType);
+        }
+      }
 
       // Deliver signed webhook notifications for group events
       const webhookEvent = this.mapToWebhookEvent(stored.eventType);
       if (webhookEvent) {
         const groupId = this.extractGroupId(stored.data);
-        deliverWebhookEvent(webhookEvent, {
-          contractId: stored.contractId,
-          txHash: stored.txHash,
-          ledgerSeq: stored.ledgerSeq,
-          timestamp: stored.timestamp.toISOString(),
-          data: stored.data,
-        }, groupId).catch(() => {/* non-blocking */});
+        deliverWebhookEvent(
+          webhookEvent,
+          {
+            contractId: stored.contractId,
+            txHash: stored.txHash,
+            ledgerSeq: stored.ledgerSeq,
+            timestamp: stored.timestamp.toISOString(),
+            data: stored.data,
+          },
+          groupId
+        ).catch(() => {
+          /* non-blocking */
+        });
       }
 
       // Update member reputation for contribution events
       if (webhookEvent === 'contribution.created') {
-        const data = stored.data as any;
-        const memberAddress = data?.member || data?.address;
+        const data = stored.data as Record<string, unknown>;
+        const memberAddress = (data?.['member'] ?? data?.['address']) as string | undefined;
         if (memberAddress) {
           // Treat all indexed contributions as on-time (late detection requires cycle data)
-          recordContribution(String(memberAddress), true).catch(() => {/* non-blocking */});
+          recordContribution(String(memberAddress), true).catch(() => {
+            /* non-blocking */
+          });
         }
       }
     } catch (error) {
-      console.error('Error storing event:', error);
+      logger.error('[ContractEventIndexer] Error storing event:', error);
     }
   }
 
-  private async notifyOnEvent(event: any): Promise<void> {
+  private async notifyOnEvent(event: HorizonEventRecord): Promise<void> {
     if (!this.webPush) return;
 
     const eventType: string = event.type || event.eventType || '';
@@ -173,7 +357,9 @@ export class ContractEventIndexer {
         data: { eventType, txHash: event.transactionHash ?? event.txHash, groupId, amount },
       };
       await this.webPush.sendToMembers(members, payload);
-      console.log(`Push notification sent for payout event (ledger ${event.ledger ?? event.ledgerSeq})`);
+      logger.info(
+        `Push notification sent for payout event (ledger ${event.ledger ?? event.ledgerSeq})`
+      );
       return;
     }
 
@@ -188,21 +374,23 @@ export class ContractEventIndexer {
         data: { eventType, txHash: event.transactionHash ?? event.txHash, groupId, amount },
       };
       await this.webPush.sendToMembers(members, payload);
-      console.log(`Push notification sent for missed-contribution event (ledger ${event.ledger ?? event.ledgerSeq})`);
+      logger.info(
+        `Push notification sent for missed-contribution event (ledger ${event.ledger ?? event.ledgerSeq})`
+      );
     }
   }
 
   async stop() {
     this.isRunning = false;
     await this.prisma.$disconnect();
-    console.log('Indexer stopped');
+    logger.info('Indexer stopped');
   }
 
   async readinessCheckDatabase(): Promise<DependencyHealth> {
     const start = Date.now();
     try {
       // Lightweight connectivity test
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+       
       await this.prisma.$queryRaw`SELECT 1`;
       return { up: true, latencyMs: Date.now() - start };
     } catch (err) {
@@ -218,13 +406,17 @@ export class ContractEventIndexer {
     const start = Date.now();
     try {
       // Use Horizon SDK as a reachability check (latest ledger is cheap enough)
-      await this.server.ledgers().order('desc').limit(1).call();
+      await withHorizonCircuit(() => this.server.ledgers().order('desc').limit(1).call());
       return { up: true, latencyMs: Date.now() - start };
     } catch (err) {
       return {
         up: false,
         latencyMs: Date.now() - start,
-        error: err instanceof Error ? err.message : String(err),
+        error: isCircuitOpenError(err)
+          ? 'Horizon circuit breaker is OPEN'
+          : err instanceof Error
+            ? err.message
+            : String(err),
       };
     }
   }
@@ -244,19 +436,19 @@ export class ContractEventIndexer {
     limit?: number;
     offset?: number;
   }) {
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (options.contractId) where.contractId = options.contractId;
     if (options.eventType) where.eventType = options.eventType;
     if (options.startLedger || options.endLedger) {
       where.ledgerSeq = {};
-      if (options.startLedger) where.ledgerSeq.gte = options.startLedger;
-      if (options.endLedger) where.ledgerSeq.lte = options.endLedger;
+      if (options.startLedger) (where.ledgerSeq as Record<string, unknown>).gte = options.startLedger;
+      if (options.endLedger) (where.ledgerSeq as Record<string, unknown>).lte = options.endLedger;
     }
     if (options.startTime || options.endTime) {
       where.timestamp = {};
-      if (options.startTime) where.timestamp.gte = options.startTime;
-      if (options.endTime) where.timestamp.lte = options.endTime;
+      if (options.startTime) (where.timestamp as Record<string, unknown>).gte = options.startTime;
+      if (options.endTime) (where.timestamp as Record<string, unknown>).lte = options.endTime;
     }
 
     const events = await this.prisma.contractEvent.findMany({

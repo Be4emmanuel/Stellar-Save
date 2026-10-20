@@ -227,6 +227,100 @@ jobs:
           name: frontend-performance
           path: ${{ env.RESULTS_DIR }}/
 
+  # ─── Contract Benchmark Regression Gate ─────────────────────────────────────
+  regression-gate:
+    name: Benchmark Regression Gate
+    needs: gas-benchmarks
+    runs-on: ubuntu-latest
+    # Run on push/PR; also on weekly schedule so regressions are caught early
+    if: always() && needs.gas-benchmarks.result != 'cancelled'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Download gas benchmark artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gas-benchmarks
+          path: ${{ env.RESULTS_DIR }}
+        # If the gas-benchmarks job failed, the artifact may not exist.
+        # In that case we fall through to a fresh benchmark run.
+        continue-on-error: true
+
+      - name: Run regression gate
+        id: regression
+        run: |
+          mkdir -p ${{ env.RESULTS_DIR }}
+          # If a pre-existing log was downloaded, use dry-run to avoid re-running
+          if [ -f "${{ env.RESULTS_DIR }}/gas-benchmarks.log" ]; then
+            BENCHMARK_LOG="${{ env.RESULTS_DIR }}/gas-benchmarks.log" \
+              bash scripts/benchmark_regression.sh --dry-run
+          else
+            # No downloaded log — run benchmarks fresh
+            bash scripts/benchmark_regression.sh
+          fi
+
+      - name: Upload regression report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-regression-report
+          path: ${{ env.RESULTS_DIR }}/benchmark-regression-report.json
+          retention-days: 90
+
+      - name: Comment regression results on PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request' && always()
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const reportPath = path.join('${{ env.RESULTS_DIR }}', 'benchmark-regression-report.json');
+            let body = '## ⚡ Contract Benchmark Regression Gate\n\n';
+
+            try {
+              const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+              const { summary, regression_found, regression_threshold_pct } = report;
+
+              if (regression_found) {
+                body += `❌ **${summary.regressions} regression(s) detected** (threshold: +${regression_threshold_pct}%)\n\n`;
+              } else {
+                body += `✅ **No regressions detected** (threshold: +${regression_threshold_pct}%)\n\n`;
+              }
+
+              body += `| Result | Count |\n|--------|-------|\n`;
+              body += `| ✅ Passed | ${summary.passed} |\n`;
+              body += `| ❌ Regressions | ${summary.regressions} |\n`;
+              body += `| ⏭️ Skipped (not in output) | ${summary.skipped} |\n\n`;
+
+              if (regression_found) {
+                body += '**Regressed functions:**\n';
+                for (const fn of report.functions.filter(f => f.regression)) {
+                  body += `- \`${fn.function}\`: ${fn.baseline.toLocaleString()} → ${fn.measured.toLocaleString()} (+${fn.delta_pct}%)\n`;
+                }
+                body += '\nTo update the baseline after an intentional improvement:\n';
+                body += '```bash\nbash scripts/benchmark_regression.sh --update-baseline\n```\n';
+              }
+            } catch (e) {
+              body += `Could not load regression report: ${e.message}\n`;
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
   # ─── Performance Trend Tracking ─────────────────────────────────────────────
   performance-trends:
     name: Performance Trend Analysis

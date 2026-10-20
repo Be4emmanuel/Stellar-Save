@@ -7,12 +7,5 @@
     "appearanceDesc": "Choose how Stellar Save looks to you.",
     "language": "Language",
     "languageDesc": "Choose your preferred language."
-  },
-  "common": {
-    "save": "Save",
-    "cancel": "Cancel"
-  },
-  "scheduler": {
-    "balanceWarning": "Your balance is {{balance}} of {{total}}"
   }
 }

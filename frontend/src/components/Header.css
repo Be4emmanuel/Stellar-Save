@@ -62,7 +62,9 @@
 }
 
 .wallet-button {
-  background: #4a90e2;
+  background: var(--color-primary);
+  /* Fixed white text on a solid --color-primary fill — stays AA-compliant in both themes. */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list */
   color: #fff;
   border: none;
   padding: 0.5rem 1rem;
@@ -74,7 +76,7 @@
 }
 
 .wallet-button:hover {
-  background: #357abd;
+  background: var(--color-primary-hover);
 }
 
 @media (max-width: 768px) {

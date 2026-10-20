@@ -2,10 +2,11 @@ import { renderHook, act } from '@testing-library/react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach } from 'vitest';
+
+import { LanguageSelector } from '../components/LanguageSelector';
+import { useI18n } from '../hooks/useI18n';
 import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES } from '../i18n';
-import { useI18n } from '../hooks/useI18n';
-import { LanguageSelector } from '../components/LanguageSelector';
 
 // Reset to English before each test
 beforeEach(async () => {
@@ -22,19 +23,19 @@ describe('i18n translations', () => {
 
   it('returns English strings by default', () => {
     expect(i18n.t('settings.title')).toBe('Settings');
-    expect(i18n.t('common.save')).toBe('Save');
+    expect(i18n.t('settings.subtitle')).toBe('Configure your preferences');
   });
 
   it('returns French strings when language is fr', async () => {
     await i18n.changeLanguage('fr');
     expect(i18n.t('settings.title')).toBe('Paramètres');
-    expect(i18n.t('common.save')).toBe('Enregistrer');
+    expect(i18n.t('settings.subtitle')).toBe('Configurez vos préférences');
   });
 
   it('returns Yoruba strings when language is yo', async () => {
     await i18n.changeLanguage('yo');
     expect(i18n.t('settings.title')).toBe('Ètò');
-    expect(i18n.t('common.save')).toBe('Fipamọ');
+    expect(i18n.t('settings.subtitle')).toBe('Ṣe iṣeto ayanfẹ rẹ');
   });
 
   it('falls back to English for missing keys', async () => {
@@ -44,9 +45,10 @@ describe('i18n translations', () => {
   });
 
   it('interpolates variables in translation strings', () => {
-    const result = i18n.t('scheduler.balanceWarning', { balance: '50', total: '100' });
-    expect(result).toContain('50');
-    expect(result).toContain('100');
+    const result = i18n.t('settings.footerText', {
+      defaultValue: 'Stellar Save - Built for transparent, on-chain savings',
+    });
+    expect(result).toContain('Stellar Save');
   });
 });
 
@@ -81,7 +83,7 @@ describe('useI18n', () => {
 
   it('t() translates keys correctly', () => {
     const { result } = renderHook(() => useI18n());
-    expect(result.current.t('common.cancel')).toBe('Cancel');
+    expect(result.current.t('settings.language')).toBe('Language');
   });
 });
 

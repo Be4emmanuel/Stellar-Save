@@ -15,6 +15,7 @@ export interface Group {
   currentMembers: number;
   status: string;
   tags: string[];
+  flagged?: boolean;
 }
 
 export interface UserInteraction {
@@ -30,6 +31,7 @@ export interface Member {
   name: string;
   joinedAt: number;
   groupIds: string[];
+  flagged?: boolean;
 }
 
 export interface Transaction {
@@ -94,7 +96,7 @@ export interface AuditLog {
   targetId?: string;
   targetType?: string;
   timestamp: number;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 // ========== NOTIFICATION MODELS (Issue #557) ==========
@@ -139,7 +141,7 @@ export interface Notification {
   recipient: string;
   subject?: string;
   renderedContent: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   status: NotificationStatus;
   externalId?: string;
   failureReason?: string;
@@ -155,7 +157,7 @@ export interface NotificationQueue {
   userId: string;
   templateKey: string;
   recipient: string;
-  templateData: Record<string, any>;
+  templateData: Record<string, unknown>;
   notificationType: NotificationType;
   priority: number;
   scheduledFor: Date;
@@ -168,7 +170,7 @@ export interface NotificationEvent {
   eventType: string;
   userId: string;
   groupId?: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   timestamp: number;
 }
 
