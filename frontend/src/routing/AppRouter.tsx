@@ -11,6 +11,9 @@ import { routeConfig } from './routes';
 /**
  * Main application router component.
  * Renders routes based on centralized configuration.
+ * Each route is wrapped in its own RouteErrorBoundary so that an error in
+ * one page does not blank the entire app — the navigation shell stays intact
+ * and the user can navigate to another route.
  */
 export function AppRouter() {
   return (
