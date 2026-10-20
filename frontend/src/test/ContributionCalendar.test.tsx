@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { ContributionCalendar } from '../components/ContributionCalendar';
 import type { GroupContribution, GroupCycle } from '../utils/groupApi';
+import { makeContributionCycle } from './factories';
 
 beforeAll(() => {
   global.ResizeObserver = class {

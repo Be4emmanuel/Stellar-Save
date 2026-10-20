@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import GroupsPage from '../pages/GroupsPage';
+import { makePublicGroup } from './factories';
 
 // WalletStatusIndicator imports @mui/icons-material which isn't installed — mock it
 vi.mock('../components/WalletStatusIndicator', () => ({
@@ -12,8 +13,8 @@ vi.mock('../components/WalletStatusIndicator', () => ({
 
 const mockSetFilters = vi.fn();
 const mockGroups = [
-  { id: '1', name: 'Alpha Circle', currency: 'XLM', contributionAmount: 100, memberCount: 5, status: 'active', createdAt: new Date() },
-  { id: '2', name: 'Beta Pool', currency: 'USDC', contributionAmount: 250, memberCount: 8, status: 'active', createdAt: new Date() },
+  makePublicGroup({ id: '1', name: 'Alpha Circle', contributionAmount: 100, memberCount: 5, status: 'active' }),
+  makePublicGroup({ id: '2', name: 'Beta Pool', currency: 'USDC', contributionAmount: 250, memberCount: 8, status: 'active' }),
 ];
 
 vi.mock('../hooks/useGroups', () => ({

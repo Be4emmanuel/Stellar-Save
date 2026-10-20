@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContributionScheduler } from '../components/ContributionScheduler';
 import * as useScheduledContributionsModule from '../hooks/useScheduledContributions';
 import * as useBalanceModule from '../hooks/useBalance';
+import { makeContributionCycle } from './factories';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 

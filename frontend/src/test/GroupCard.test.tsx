@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GroupCard } from '../components/GroupCard';
 import { fetchGroup } from '../utils/groupApi';
+import { makeGroup } from './factories';
 
 vi.mock('../utils/groupApi');
 
@@ -25,13 +26,11 @@ function renderCard(props = {}) {
   return render(<GroupCard {...defaultProps} {...props} />, { wrapper });
 }
 
-const MOCK_FETCHED_GROUP = {
+const MOCK_FETCHED_GROUP = makeGroup({
   id: 'group-42',
   name: 'Fetched Circle',
   memberCount: 12,
   contributionAmount: 10_000_000,
-  currency: 'XLM',
-  status: 'active',
   currentCycle: 3,
   startedAt: new Date('2026-01-01'),
   cycleDuration: 86400,
@@ -40,10 +39,8 @@ const MOCK_FETCHED_GROUP = {
   creator: 'GABC...',
   maxMembers: 20,
   minMembers: 3,
-  isActive: true,
-  started: true,
   createdAt: new Date('2026-01-01'),
-};
+});
 
 describe('GroupCard — static mode', () => {
   it('renders group name', () => {

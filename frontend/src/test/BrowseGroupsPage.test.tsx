@@ -6,7 +6,6 @@ import BrowseGroupsPage from '../pages/BrowseGroupsPage';
 import { routeConfig } from '../routing/routes';
 import { ROUTES } from '../routing/constants';
 import { fetchGroups } from '../utils/groupApi';
-import type { PublicGroup } from '../utils/groupApi';
 import { clearGroupsCache } from '../hooks/useGroups';
 
 vi.mock('../ui', () => ({
@@ -31,12 +30,14 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
+import { makePublicGroup } from './factories';
+
 const mockFetchGroups = vi.mocked(fetchGroups);
 
-const mockGroups: PublicGroup[] = [
-  { id: '1', name: 'Alpha Savers', description: 'First group', memberCount: 5, contributionAmount: 100, currency: 'XLM', status: 'active', createdAt: new Date('2024-01-01') },
-  { id: '2', name: 'Beta Circle', description: 'Second group', memberCount: 3, contributionAmount: 50, currency: 'XLM', status: 'pending', createdAt: new Date('2024-02-01') },
-  { id: '3', name: 'Gamma Fund', description: 'Third group', memberCount: 8, contributionAmount: 200, currency: 'XLM', status: 'completed', createdAt: new Date('2024-03-01') },
+const mockGroups = [
+  makePublicGroup({ id: '1', name: 'Alpha Savers', description: 'First group', memberCount: 5, contributionAmount: 100, status: 'active', createdAt: new Date('2024-01-01') }),
+  makePublicGroup({ id: '2', name: 'Beta Circle', description: 'Second group', memberCount: 3, contributionAmount: 50, status: 'pending', createdAt: new Date('2024-02-01') }),
+  makePublicGroup({ id: '3', name: 'Gamma Fund', description: 'Third group', memberCount: 8, contributionAmount: 200, status: 'completed', createdAt: new Date('2024-03-01') }),
 ];
 
 function renderPage() {
