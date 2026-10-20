@@ -1,9 +1,28 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 /**
  * E2E tests: Group creation flow
  * Covers navigation to create group page, form rendering, and validation.
  */
+
+/**
+ * Mocks a connected Freighter wallet so pages that gate their content behind
+ * a wallet connection (e.g. the create-group form) actually render it,
+ * instead of routinely hitting the "no wallet" branch (see #1911 — this is
+ * why the two tests below used to skip on every run).
+ */
+async function mockConnectedWallet(page: Page) {
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>).freighter = {
+      isConnected: () => Promise.resolve(true),
+      getPublicKey: () =>
+        Promise.resolve('GTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDE'),
+      getNetwork: () => Promise.resolve('TESTNET'),
+      signTransaction: () => Promise.resolve('mock-signed-tx'),
+    };
+  });
+}
+
 test.describe('Group creation flow', () => {
   test('create group page loads without crashing', async ({ page }) => {
     await page.goto('/groups/create');
@@ -36,15 +55,7 @@ test.describe('Group creation flow', () => {
   });
 
   test('create group form shows group name field when wallet connected', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as unknown as Record<string, unknown>).freighter = {
-        isConnected: () => Promise.resolve(true),
-        getPublicKey: () =>
-          Promise.resolve('GTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDE'),
-        getNetwork: () => Promise.resolve('TESTNET'),
-        signTransaction: () => Promise.resolve('mock-signed-tx'),
-      };
-    });
+    await mockConnectedWallet(page);
     await page.goto('/groups/create');
     await page.waitForLoadState('networkidle');
 
@@ -60,12 +71,13 @@ test.describe('Group creation flow', () => {
   });
 
   test('create group form shows validation errors on empty submit', async ({ page }) => {
+    await mockConnectedWallet(page);
     await page.goto('/groups/create');
     await page.waitForLoadState('networkidle');
 
     const nameField = page.getByLabel(/group name/i);
     if (!(await nameField.isVisible().catch(() => false))) {
-      test.skip();
+      test.skip(true, 'Group name field not rendered even with a connected wallet mocked');
       return;
     }
 
@@ -78,12 +90,13 @@ test.describe('Group creation flow', () => {
   });
 
   test('create group form step 1 accepts valid input and advances', async ({ page }) => {
+    await mockConnectedWallet(page);
     await page.goto('/groups/create');
     await page.waitForLoadState('networkidle');
 
     const nameField = page.getByLabel(/group name/i);
     if (!(await nameField.isVisible().catch(() => false))) {
-      test.skip();
+      test.skip(true, 'Group name field not rendered even with a connected wallet mocked');
       return;
     }
 
